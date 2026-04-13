@@ -22,12 +22,9 @@ stepEnemy dt sol e = case eState e of
         (newUp, newTimer) = if t' <= 0
                             then (not up, if up then 2.0 else 1.5)
                             else (up, t')
-        -- Target Y: when up, sit at pipe top (row+1); when down, hide at pipe interior (row)
         baseY = fromIntegral (floor (eY e / ts)) * ts
         targetY = if newUp then baseY + ts else baseY
-        -- Move smoothly toward target (but for simplicity, snap)
-        newY = targetY
-    in e { eState = EPiranha newTimer newUp, eY = newY }
+    in e { eState = EPiranha newTimer newUp, eY = targetY }
 
 stepAlive :: Float -> [Tile] -> Enemy -> Enemy
 stepAlive dt sol e
@@ -101,19 +98,16 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
                   , e { eState = EShell 8.0 False } : acc
                   , s + 100 )
                 EShell _ False ->
-                  -- Stomping stationary shell does nothing (no score, no state change)
+                  -- stationary shell: bounce but no score or state change
                   ( mario { mVY = bounceVel jumpHeld }, e:acc, s )
                 EShell _ True ->
-                  -- Stomping moving shell stops it
+                  -- moving shell: stops it and gives points
                   ( mario { mVY = bounceVel jumpHeld }
                   , e { eState = EShell 8.0 False } : acc
                   , s + 100 )
                 _ -> (mario, e:acc, s)
             Piranha ->
-              -- Piranha hurts even when stomped? In SMB, you can't stomp Piranha safely.
-              if mState mario == Big
-                then ( mario { mState = Small, mInv = 2.0 }, e:acc, s )
-                else ( mario { mState = MDead, mVY = 500, mVX = 0 }, e:acc, s )
+              hurtMario mario e acc s
 
       -- Mario kicks stationary Koopa shell from side
       | eType e == Koopa &&
@@ -130,7 +124,7 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
       -- Normal enemy contact (side/bottom)
       | otherwise = hurtMario mario e acc s
 
-        hurtMario mario e acc s
+    hurtMario mario e acc s
       | mState mario == Big =
           let knockbackDir = if mX mario < eX e then -1 else 1
               knockbackX = 200 * fromIntegral knockbackDir
