@@ -4,6 +4,7 @@ import Graphics.Gloss
 
 data TType = Ground | Brick | QBlock | Used
            | Pipe | PipeTop | PipeR | FlagPole | FlagBase | Castle
+           | SlopeLeft | SlopeRight   -- 45° slopes
   deriving (Eq, Show)
 
 data Tile = Tile { tCol :: Int, tRow :: Int, tType :: TType } deriving Show
@@ -11,7 +12,7 @@ data Tile = Tile { tCol :: Int, tRow :: Int, tType :: TType } deriving Show
 data EType = Goomba | Koopa deriving (Eq, Show)
 
 data Enemy = Enemy
-  { eX, eY, eVX :: Float
+  { eX, eY, eVX, eVY :: Float   -- added eVY
   , eAlive :: Bool
   , eDead  :: Bool
   , eTimer :: Float

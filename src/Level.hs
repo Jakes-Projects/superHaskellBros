@@ -61,8 +61,8 @@ mkTiles = ground ++ structs ++ pipes ++ stairs ++ flag ++ castle
       stairU 140 4 ++ stairD 146 4 ++
       [Tile (196+i) r Ground | i <- [0..7], r <- [1..i+1]]
 
-    stairU c h = [Tile (c+i) r Ground | i <- [0..h-1], r <- [1..i+1]]
-    stairD c h = [Tile (c+i) r Ground | i <- [0..h-1], r <- [1..(h-i)]]
+    stairU c h = [Tile (c+i) r (if i == r-1 then SlopeRight else Ground) | i <- [0..h-1], r <- [1..i+1]]
+    stairD c h = [Tile (c+i) r (if i == (h - r) then SlopeLeft else Ground) | i <- [0..h-1], r <- [1..(h-i)]]
 
     flag = [Tile 204 r FlagPole | r <- [1..10]] ++ [Tile 204 0 FlagBase]
 
@@ -73,8 +73,8 @@ mkTiles = ground ++ structs ++ pipes ++ stairs ++ flag ++ castle
 mkEnemies :: [Enemy]
 mkEnemies = map mkG gPs ++ map mkK kPs
   where
-    mkG c = Enemy (c*ts) ts (-80) True False 0 Goomba
-    mkK c = Enemy (c*ts) ts (-70) True False 0 Koopa
+    mkG c = Enemy (c*ts) ts (-80) 0 True False 0 Goomba
+    mkK c = Enemy (c*ts) ts (-70) 0 True False 0 Koopa
     gPs = [20,22,37,40,57,59,80,82,100,102,110,116,150,152]
     kPs = [60,92,130]
 

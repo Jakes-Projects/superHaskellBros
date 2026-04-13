@@ -108,16 +108,18 @@ drawTile t = translate tx ty pic
     tx  = fromIntegral (tCol t)*ts + ts/2
     ty  = fromIntegral (tRow t)*ts + ts/2
     pic = case tType t of
-      Ground  -> drawGround
-      Brick   -> drawBrick
-      QBlock  -> drawQBlock
-      Used    -> drawUsed
-      PipeTop -> drawPipeTop
-      Pipe    -> drawPipe
-      PipeR   -> blank
-      FlagPole-> drawFlagPole
-      FlagBase-> drawFlagBase
-      Castle  -> drawCastle t
+      Ground   -> drawGround
+      Brick    -> drawBrick
+      QBlock   -> drawQBlock
+      Used     -> drawUsed
+      PipeTop  -> drawPipeTop
+      Pipe     -> drawPipe
+      PipeR    -> blank
+      FlagPole -> drawFlagPole
+      FlagBase -> drawFlagBase
+      Castle   -> drawCastle t
+      SlopeLeft  -> drawGround   -- or drawSlopeLeft
+      SlopeRight -> drawGround   -- or drawSlopeRight
 
 drawGround :: Picture
 drawGround = pictures

@@ -2,20 +2,32 @@ module Enemy (stepEnemy, collideEnemies) where
 
 import Constants (ts, grav)
 import Types
-import Physics (hit, mBB, tBB, eBB)
+import Physics (hit, mBB, tBB, eBB, solid)
 
 stepEnemy :: Float -> [Tile] -> Enemy -> Enemy
 stepEnemy dt sol e
   | not (eAlive e) = e { eTimer = eTimer e - dt }
-  | otherwise = e { eX = ex', eVX = vx', eY = ey' }
+  | otherwise = e { eX = ex', eVX = vx', eY = ey', eVY = vy' }
   where
-    ex0  = eX e + eVX e * dt
-    wall = any (hit (ex0+ts/2, eY e+ts/2, ts*0.7, ts*0.7) . tBB) sol
-    vx'  = if wall then -(eVX e) else eVX e
-    ex'  = if wall then eX e else max 0 ex0
-    ey0  = eY e - 60*dt   -- placeholder gravity (will improve later)
-    onG  = any (hit (ex'+ts/2, ey0+ts/2, ts*0.5, ts*0.5) . tBB) sol
-    ey'  = if onG then eY e else ey0
+    -- Horizontal movement with wall collision
+    ex0   = eX e + eVX e * dt
+    wallX = any (hit (ex0+ts/2, eY e+ts/2, ts*0.7, ts*0.7) . tBB) sol
+    vx1   = if wallX then -eVX e else eVX e
+    ex1   = if wallX then eX e else max 0 ex0
+
+    -- Edge detection: check if there's ground ahead
+    aheadX = ex1 + (if vx1 > 0 then ts else -ts)
+    probe  = (aheadX+ts/2, eY e-ts/4, ts*0.5, ts*0.5)
+    edge   = not (any (hit probe . tBB) sol)
+    vx2   = if edge then -vx1 else vx1
+    ex'   = ex1
+    vx'   = vx2
+
+    -- Vertical movement with gravity
+    vy0   = eVY e + grav * dt
+    ey0   = eY e + vy0 * dt
+    onG   = any (hit (ex'+ts/2, ey0+ts/2, ts*0.5, ts*0.5) . tBB) sol
+    (ey', vy') = if onG then (eY e, 0) else (ey0, vy0)
 
 collideEnemies :: Mario -> [Enemy] -> Int -> (Mario,[Enemy],Int)
 collideEnemies m es sc = foldr go (m,[],sc) es
