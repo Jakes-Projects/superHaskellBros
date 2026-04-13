@@ -31,9 +31,12 @@ step dt gs
     cam = max (gCam gs) (mX m4 - fromIntegral sW * 0.35)
 
     es1 = map (stepEnemy dt sol) (gEnem gs)
-    es2 = filter (\e -> eAlive e || eTimer e > 0) es1
+    es2 = filter (\e -> case eState e of
+                          EDead t -> t > 0
+                          _       -> True) es1
 
-    (m5, es3, sc1) = collideEnemies m4 es2 (gScore gs)
+    -- Pass jump-held flag (kJ) to collideEnemies for variable bounce
+    (m5, es3, sc1) = collideEnemies m4 es2 (gScore gs) (kJ ks)
     (cs, sc2)      = pickCoins (mBB m5) (gCoins gs) sc1
     (ts2, pu1, sc3)= bumpBlocks m5 (mVY m0) (gTiles gs) (gPups gs) sc2
     pu2            = map (stepPup dt (filter (solid . tType) ts2)) pu1

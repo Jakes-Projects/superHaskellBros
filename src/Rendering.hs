@@ -269,32 +269,82 @@ drawEnem :: [Enemy] -> Picture
 drawEnem = pictures . map drawE
 
 drawE :: Enemy -> Picture
-drawE e
-  | eDead e        = translate cx (eY e + 5) flat
-  | not (eAlive e) = blank
-  | otherwise      = translate cx (eY e + ts/2) body
+drawE e = case eState e of
+  EDead _ -> translate cx (eY e + 5) flat   -- squished
+  _       -> if shouldDrawAlive e
+               then translate cx (eY e + ts/2) (drawEnemyBody e)
+               else blank
   where
     cx   = eX e + ts/2
     flat = color (makeColorI 130 70 15 255) (rectangleSolid (ts*0.9) 9)
-    body = case eType e of
-      Goomba -> pictures
-        [ color (makeColorI 130 70 15 255)  (rectangleSolid (ts*0.85) (ts*0.8))
-        , color (makeColorI 70 35 0 255)    (translate 0 (-ts*0.28) (rectangleSolid (ts*0.9) (ts*0.22)))
-        , color white  (translate (-7) 5 (circleSolid 5))
-        , color white  (translate  (7) 5 (circleSolid 5))
-        , color black  (translate (-7) 5 (circleSolid 2.5))
-        , color black  (translate  (7) 5 (circleSolid 2.5))
-        ]
-      Koopa -> pictures
-        [ color (makeColorI 0 175 0 255)    (rectangleSolid (ts*0.8) (ts*1.05))
-        , color (makeColorI 255 215 90 255) (translate 0 (ts*0.32) (circleSolid (ts*0.28)))
-        , color (makeColorI 0 120 0 255)    (scale (ts*0.32) (ts*0.48) (circleSolid 1))
-        , color white  (translate (-6) (ts*0.28) (circleSolid 4))
-        , color white  (translate  (6) (ts*0.28) (circleSolid 4))
-        , color black  (translate (-6) (ts*0.28) (circleSolid 2))
-        , color black  (translate  (6) (ts*0.28) (circleSolid 2))
-        ]
 
+    shouldDrawAlive e = case eState e of
+      EAlive        -> True
+      EShell _ _    -> True
+      EPiranha _ up -> up   -- only draw when emerged
+      _             -> False
+
+    drawEnemyBody e = case eType e of
+      Goomba  -> drawGoomba
+      Koopa   -> drawKoopa e
+      Piranha -> translate 0 (ts*0.6) drawPiranha   -- raise slightly above pipe
+
+-- Goomba sprite (same as before)
+drawGoomba :: Picture
+drawGoomba = pictures
+  [ color (makeColorI 130 70 15 255)  (rectangleSolid (ts*0.85) (ts*0.8))
+  , color (makeColorI 70 35 0 255)    (translate 0 (-ts*0.28) (rectangleSolid (ts*0.9) (ts*0.22)))
+  , color white  (translate (-7) 5 (circleSolid 5))
+  , color white  (translate  (7) 5 (circleSolid 5))
+  , color black  (translate (-7) 5 (circleSolid 2.5))
+  , color black  (translate  (7) 5 (circleSolid 2.5))
+  ]
+
+-- Koopa sprite (now handles shell state)
+drawKoopa :: Enemy -> Picture
+drawKoopa e = case eState e of
+  EShell _ True  -> drawMovingShell
+  EShell _ False -> drawStationaryShell
+  _              -> drawLiveKoopa
+
+drawLiveKoopa :: Picture
+drawLiveKoopa = pictures
+  [ color (makeColorI 0 175 0 255)    (rectangleSolid (ts*0.8) (ts*1.05))
+  , color (makeColorI 255 215 90 255) (translate 0 (ts*0.32) (circleSolid (ts*0.28)))
+  , color (makeColorI 0 120 0 255)    (scale (ts*0.32) (ts*0.48) (circleSolid 1))
+  , color white  (translate (-6) (ts*0.28) (circleSolid 4))
+  , color white  (translate  (6) (ts*0.28) (circleSolid 4))
+  , color black  (translate (-6) (ts*0.28) (circleSolid 2))
+  , color black  (translate  (6) (ts*0.28) (circleSolid 2))
+  ]
+
+drawStationaryShell :: Picture
+drawStationaryShell = pictures
+  [ color (makeColorI 0 160 0 255) (rectangleSolid (ts*0.7) (ts*0.5))
+  , color (makeColorI 180 180 100 255) (translate 0 (ts*0.15) (circleSolid (ts*0.2)))
+  , color (makeColorI 0 120 0 255) (scale (ts*0.3) (ts*0.2) (circleSolid 1))
+  ]
+
+drawMovingShell :: Picture
+drawMovingShell = pictures
+  [ color (makeColorI 0 200 0 255) (rectangleSolid (ts*0.7) (ts*0.5))
+  , color (makeColorI 220 220 120 255) (translate 0 (ts*0.15) (circleSolid (ts*0.2)))
+  , color (makeColorI 0 150 0 255) (scale (ts*0.3) (ts*0.2) (circleSolid 1))
+  ]
+
+-- Piranha Plant sprite
+drawPiranha :: Picture
+drawPiranha = pictures
+  [ color (makeColorI 0 180 0 255) (circleSolid (ts*0.45))
+  , color (makeColorI 220 50 50 255) (translate 0 (ts*0.2) (circleSolid (ts*0.2)))
+  , color white (translate (-6) 6 (circleSolid 4))
+  , color white (translate  (6) 6 (circleSolid 4))
+  , color black (translate (-6) 6 (circleSolid 2))
+  , color black (translate  (6) 6 (circleSolid 2))
+  , color (makeColorI 0 150 0 255) (translate 0 (-ts*0.3) (rectangleSolid (ts*0.25) (ts*0.5)))
+  , color (makeColorI 0 200 0 255) (translate (-ts*0.3) (-ts*0.1) (ellipseS (ts*0.2) (ts*0.15)))
+  , color (makeColorI 0 200 0 255) (translate (ts*0.3) (-ts*0.1) (ellipseS (ts*0.2) (ts*0.15)))
+  ]
 drawPups :: [PUp] -> Picture
 drawPups = pictures . map drawPup
 

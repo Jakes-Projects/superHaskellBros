@@ -71,12 +71,15 @@ mkTiles = ground ++ structs ++ pipes ++ stairs ++ flag ++ castle
       ++ [ Tile c 5 Castle | c <- [207,209,211] ]
 
 mkEnemies :: [Enemy]
-mkEnemies = map mkG gPs ++ map mkK kPs
+mkEnemies = map mkG gPs ++ map mkK kPs ++ map mkP pPs
   where
-    mkG c = Enemy (c*ts) ts (-80) 0 True False 0 Goomba
-    mkK c = Enemy (c*ts) ts (-70) 0 True False 0 Koopa
+    mkG c = Enemy (c*ts) ts (-80) 0 EAlive Goomba
+    mkK c = Enemy (c*ts) ts (-70) 0 EAlive Koopa
+    mkP (c, r) = Enemy (c*ts) (fromIntegral r * ts) 0 0 (EPiranha 0.0 False) Piranha
     gPs = [20,22,37,40,57,59,80,82,100,102,110,116,150,152]
     kPs = [60,92,130]
+    -- Place Piranhas in pipes: column, row (inside pipe)
+    pPs = [(28,1), (38,2), (46,3), (57,3), (163,1)]
 
 mkCoins :: [(Float,Float,Bool)]
 mkCoins =

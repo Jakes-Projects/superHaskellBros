@@ -4,18 +4,23 @@ import Graphics.Gloss
 
 data TType = Ground | Brick | QBlock | Used
            | Pipe | PipeTop | PipeR | FlagPole | FlagBase | Castle
-           | SlopeLeft | SlopeRight   -- 45° slopes
+           | SlopeLeft | SlopeRight
   deriving (Eq, Show)
 
 data Tile = Tile { tCol :: Int, tRow :: Int, tType :: TType } deriving Show
 
-data EType = Goomba | Koopa deriving (Eq, Show)
+data EType = Goomba | Koopa | Piranha deriving (Eq, Show)
+
+data EnemyState
+  = EAlive
+  | EDead Float          -- timer until removal
+  | EShell Float Bool    -- timer, isMoving
+  | EPiranha Float Bool  -- timer, isEmerging (True = up, False = down)
+  deriving (Eq, Show)
 
 data Enemy = Enemy
-  { eX, eY, eVX, eVY :: Float   -- added eVY
-  , eAlive :: Bool
-  , eDead  :: Bool
-  , eTimer :: Float
+  { eX, eY, eVX, eVY :: Float
+  , eState :: EnemyState
   , eType  :: EType
   } deriving Show
 
@@ -28,7 +33,7 @@ data Mario = Mario
   , mVX, mVY :: Float
   , mGround  :: Bool
   , mState   :: MS
-  , mFace    :: Int     -- 1=right -1=left
+  , mFace    :: Int
   , mAnim    :: Float
   , mInv     :: Float
   } deriving Show
@@ -50,4 +55,4 @@ data GS = GS
   , gPhase :: Phase
   } deriving Show
 
-type BB = (Float,Float,Float,Float)  -- cx cy w h
+type BB = (Float,Float,Float,Float)
