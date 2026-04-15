@@ -4,7 +4,7 @@ import Graphics.Gloss
 
 data TType = Ground | Brick | QBlock | Used
            | Pipe | PipeTop | PipeR | FlagPole | FlagBase | Castle
-           | SlopeLeft | SlopeRight
+           | SlopeLeft | SlopeRight | Axe
   deriving (Eq, Show)
 
 data Tile = Tile { tCol :: Int, tRow :: Int, tType :: TType } deriving Show
@@ -13,9 +13,9 @@ data EType = Goomba | Koopa | Piranha deriving (Eq, Show)
 
 data EnemyState
   = EAlive
-  | EDead Float          -- timer until removal
-  | EShell Float Bool    -- timer, isMoving
-  | EPiranha Float Bool  -- timer, isEmerging (True = up, False = down)
+  | EDead Float
+  | EShell Float Bool
+  | EPiranha Float Bool
   deriving (Eq, Show)
 
 data Enemy = Enemy
@@ -40,19 +40,35 @@ data Mario = Mario
 
 data KS = KS { kL, kR, kJ, kRun :: Bool } deriving Show
 
-data Phase = Play | Over | Win deriving (Eq, Show)
+data Phase = Play | Over | Win | LevelComplete deriving (Eq, Show)
 
+-- NEW: Level definition
+data Level = Level
+  { lTiles   :: [Tile]
+  , lEnemies :: [Enemy]
+  , lCoins   :: [(Float,Float,Bool)]
+  , lPups    :: [PUp]               -- initial power‑ups (e.g., hidden in blocks)
+  , lStartX  :: Float
+  , lStartY  :: Float
+  , lEndX    :: Float               -- X position of flagpole / goal
+  , lWorld   :: Int
+  , lNumber  :: Int
+  } deriving Show
+
+-- Game state extended with current level index
 data GS = GS
-  { gMario :: Mario
-  , gTiles :: [Tile]
-  , gEnem  :: [Enemy]
-  , gPups  :: [PUp]
-  , gCoins :: [(Float,Float,Bool)]
-  , gScore :: Int
-  , gLives :: Int
-  , gCam   :: Float
-  , gKeys  :: KS
-  , gPhase :: Phase
+  { gMario    :: Mario
+  , gTiles    :: [Tile]
+  , gEnem     :: [Enemy]
+  , gPups     :: [PUp]
+  , gCoins    :: [(Float,Float,Bool)]
+  , gScore    :: Int
+  , gLives    :: Int
+  , gCam      :: Float
+  , gKeys     :: KS
+  , gPhase    :: Phase
+  , gLevelIdx :: Int                -- index into level list
+  , gLevels   :: [Level]            -- all levels
   } deriving Show
 
 type BB = (Float,Float,Float,Float)

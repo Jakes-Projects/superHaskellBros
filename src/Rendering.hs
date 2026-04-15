@@ -119,7 +119,14 @@ drawTile t = translate tx ty pic
       Castle   -> drawCastle t
       SlopeLeft  -> drawGround
       SlopeRight -> drawGround
+      Axe      -> drawAxe
 
+drawAxe :: Picture
+drawAxe = pictures
+  [ color (makeColorI 139 69 19 255) (translate 0 (-8) (rectangleSolid 6 20))   -- handle
+  , color (makeColorI 255 215 0 255) (translate 0 8 (polygon [(-10,0),(10,0),(0,12)])) -- blade
+  ]
+  
 drawGround :: Picture
 drawGround = pictures
   [ color groundBrown (rectangleSolid ts ts)
@@ -350,11 +357,15 @@ drawCoin (x,y,_)    = translate x y $
            , color (makeColorI 255 240 60 255) (circleSolid 5.5) ]
 
 drawHUD :: GS -> Picture
-drawHUD gs = translate (-370) 262 $ pictures
-  [ color white (scale 0.14 0.14 (text ("SCORE " ++ show (gScore gs))))
-  , translate 0 (-22) $ color white (scale 0.14 0.14 (text ("LIVES  " ++ show (gLives gs))))
-  , translate 250 0   $ color white (scale 0.14 0.14 (text "WORLD 1-1"))
-  ]
+drawHUD gs =
+  let currentLevel = gLevels gs !! gLevelIdx gs
+      world = lWorld currentLevel
+      lvl   = lNumber currentLevel
+  in translate (-370) 262 $ pictures
+       [ color white (scale 0.14 0.14 (text ("SCORE " ++ show (gScore gs))))
+       , translate 0 (-22) $ color white (scale 0.14 0.14 (text ("LIVES  " ++ show (gLives gs))))
+       , translate 250 0   $ color white (scale 0.14 0.14 (text ("WORLD " ++ show world ++ "-" ++ show lvl)))
+       ]
 
 drawOverlay :: GS -> Picture
 drawOverlay gs = case gPhase gs of

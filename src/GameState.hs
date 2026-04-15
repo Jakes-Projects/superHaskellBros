@@ -3,14 +3,43 @@ module GameState (initGS, step, handleEv) where
 import Graphics.Gloss.Interface.Pure.Game
 import Constants (sW, grav, ts)
 import Types
-import Physics (solid, physicsMario, mBB)
+import Physics (solid, physicsMario, mBB, hit, tBB)
 import Mario (inputMario, tryJump, deathCheck)
 import Enemy (stepEnemy, collideEnemies, handleShellEnemyCollisions)
 import PowerUp (bumpBlocks, stepPup, grabPups, pickCoins)
-import Level (initMario, mkTiles, mkEnemies, mkCoins, initKS)
+import Level (allLevels, initMarioFromLevel)
 
 initGS :: GS
-initGS = GS initMario mkTiles mkEnemies [] mkCoins 0 3 0 initKS Play
+initGS = let startLevel = allLevels !! 0
+         in GS { gMario    = initMarioFromLevel startLevel
+               , gTiles    = lTiles startLevel
+               , gEnem     = lEnemies startLevel
+               , gPups     = lPups startLevel
+               , gCoins    = lCoins startLevel
+               , gScore    = 0
+               , gLives    = 3
+               , gCam      = 0
+               , gKeys     = KS False False False False
+               , gPhase    = Play
+               , gLevelIdx = 0
+               , gLevels   = allLevels
+               }
+
+-- Load a specific level by index (0‑based)
+loadLevel :: Int -> GS -> GS
+loadLevel idx gs
+  | idx >= 0 && idx < length (gLevels gs) =
+      let lvl = gLevels gs !! idx
+      in gs { gMario    = initMarioFromLevel lvl
+            , gTiles    = lTiles lvl
+            , gEnem     = lEnemies lvl
+            , gPups     = lPups lvl
+            , gCoins    = lCoins lvl
+            , gCam      = 0
+            , gPhase    = Play
+            , gLevelIdx = idx
+            }
+  | otherwise = gs
 
 step :: Float -> GS -> GS
 step dt gs
@@ -31,7 +60,6 @@ step dt gs
     cam = max (gCam gs) (mX m4 - fromIntegral sW * 0.35)
 
     es1 = map (stepEnemy dt sol) (gEnem gs)
-    -- Apply shell-enemy collisions (moving shells kill other enemies)
     es1' = handleShellEnemyCollisions es1
     es2 = filter (\e -> case eState e of
                           EDead t -> t > 0
@@ -43,22 +71,55 @@ step dt gs
     pu2            = map (stepPup dt (filter (solid . tType) ts2)) pu1
     (m6, pu3, sc4) = grabPups m5 pu2 sc3
 
-    (m7, ph) = deathCheck m6 (gLives gs)
-    ph2 | ph == Play && mX m6 >= 204*ts = Win
+    onLava = any (\t -> tRow t == (-2) && hit (mBB m6) (tBB t)) (gTiles gs)
+    (m7, ph) = if onLava
+                 then (m6 { mState = MDead, mVY = 500, mVX = 0 }, Play)
+                 else deathCheck m6 (gLives gs)
+
+    currentLevel = gLevels gs !! gLevelIdx gs
+    endX = lEndX currentLevel
+
+    touchedAxe = any (\t -> tType t == Axe && hit (mBB m7) (tBB t)) (gTiles gs)
+    ph2 | touchedAxe = Win
+        | ph == Play && mX m7 >= endX = LevelComplete
         | otherwise = ph
 
-    gs' = gs { gMario = m7
-             , gTiles = ts2
-             , gEnem  = es3
-             , gPups  = pu3
-             , gCoins = cs
-             , gScore = sc4
-             , gLives = if ph /= Play then max 0 (gLives gs - 1) else gLives gs
-             , gCam   = cam
-             , gPhase = ph2 }
+    gsTemp = gs { gMario = m7
+                , gTiles = ts2
+                , gEnem  = es3
+                , gPups  = pu3
+                , gCoins = cs
+                , gScore = sc4
+                , gLives = if ph /= Play then max 0 (gLives gs - 1) else gLives gs
+                , gCam   = cam
+                , gPhase = ph2 }
+
+    gs' = case ph2 of
+            LevelComplete -> advanceToNextLevel gsTemp
+            _             -> gsTemp
+
+advanceToNextLevel :: GS -> GS
+advanceToNextLevel gs =
+  let nextIdx = gLevelIdx gs + 1
+  in if nextIdx < length (gLevels gs)
+     then let nextLvl = gLevels gs !! nextIdx
+          in gs { gMario    = initMarioFromLevel nextLvl
+                , gTiles    = lTiles nextLvl
+                , gEnem     = lEnemies nextLvl
+                , gPups     = lPups nextLvl
+                , gCoins    = lCoins nextLvl
+                , gCam      = 0
+                , gPhase    = Play
+                , gLevelIdx = nextIdx
+                }
+     else gs { gPhase = Win }
 
 handleEv :: Event -> GS -> GS
 handleEv (EventKey (Char 'r') Down _ _) _ = initGS
+-- Level select keys (1-4) for quick testing
+handleEv (EventKey (Char d) Down _ _) gs
+  | d >= '1' && d <= '4' = loadLevel (digitToInt d - 1) gs
+  where digitToInt c = fromEnum c - fromEnum '0'
 handleEv _ gs | gPhase gs /= Play = gs
 handleEv ev gs = case ev of
   EventKey k Down _ _ -> gs { gMario = tryJump' k (gMario gs)
