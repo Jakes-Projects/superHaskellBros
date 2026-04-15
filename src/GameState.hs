@@ -5,7 +5,7 @@ import Constants (sW, grav, ts)
 import Types
 import Physics (solid, physicsMario, mBB)
 import Mario (inputMario, tryJump, deathCheck)
-import Enemy (stepEnemy, collideEnemies)
+import Enemy (stepEnemy, collideEnemies, handleShellEnemyCollisions)
 import PowerUp (bumpBlocks, stepPup, grabPups, pickCoins)
 import Level (initMario, mkTiles, mkEnemies, mkCoins, initKS)
 
@@ -31,11 +31,12 @@ step dt gs
     cam = max (gCam gs) (mX m4 - fromIntegral sW * 0.35)
 
     es1 = map (stepEnemy dt sol) (gEnem gs)
+    -- Apply shell-enemy collisions (moving shells kill other enemies)
+    es1' = handleShellEnemyCollisions es1
     es2 = filter (\e -> case eState e of
                           EDead t -> t > 0
-                          _       -> True) es1
+                          _       -> True) es1'
 
-    -- Pass jump-held flag (kJ) to collideEnemies for variable bounce
     (m5, es3, sc1) = collideEnemies m4 es2 (gScore gs) (kJ ks)
     (cs, sc2)      = pickCoins (mBB m5) (gCoins gs) sc1
     (ts2, pu1, sc3)= bumpBlocks m5 (mVY m0) (gTiles gs) (gPups gs) sc2

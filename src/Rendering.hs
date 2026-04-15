@@ -3,7 +3,6 @@ module Rendering (draw) where
 import Graphics.Gloss
 import Constants (ts, sW, sH)
 import Types
-import Physics (mBB, solid)  -- for some helper maybe, but we use direct constants
 
 skyBlue, groundBrown, groundTop, brickRed, brickDark :: Color
 skyBlue    = makeColorI 97  133 248 255
@@ -118,8 +117,8 @@ drawTile t = translate tx ty pic
       FlagPole -> drawFlagPole
       FlagBase -> drawFlagBase
       Castle   -> drawCastle t
-      SlopeLeft  -> drawGround   -- or drawSlopeLeft
-      SlopeRight -> drawGround   -- or drawSlopeRight
+      SlopeLeft  -> drawGround
+      SlopeRight -> drawGround
 
 drawGround :: Picture
 drawGround = pictures
@@ -270,7 +269,7 @@ drawEnem = pictures . map drawE
 
 drawE :: Enemy -> Picture
 drawE e = case eState e of
-  EDead _ -> translate cx (eY e + 5) flat   -- squished
+  EDead _ -> translate cx (eY e + 5) flat
   _       -> if shouldDrawAlive e
                then translate cx (eY e + ts/2) (drawEnemyBody e)
                else blank
@@ -281,15 +280,14 @@ drawE e = case eState e of
     shouldDrawAlive e = case eState e of
       EAlive        -> True
       EShell _ _    -> True
-      EPiranha _ up -> up   -- only draw when emerged
+      EPiranha _ up -> up
       _             -> False
 
     drawEnemyBody e = case eType e of
       Goomba  -> drawGoomba
       Koopa   -> drawKoopa e
-      Piranha -> translate 0 (ts*0.6) drawPiranha   -- raise slightly above pipe
+      Piranha -> translate 0 (ts*0.6) drawPiranha
 
--- Goomba sprite (same as before)
 drawGoomba :: Picture
 drawGoomba = pictures
   [ color (makeColorI 130 70 15 255)  (rectangleSolid (ts*0.85) (ts*0.8))
@@ -300,11 +298,12 @@ drawGoomba = pictures
   , color black  (translate  (7) 5 (circleSolid 2.5))
   ]
 
--- Koopa sprite (now handles shell state)
 drawKoopa :: Enemy -> Picture
 drawKoopa e = case eState e of
-  EShell _ True  -> drawMovingShell
-  EShell _ False -> drawStationaryShell
+  EShell t True  -> pictures [ color (makeColorI 255 0 0 255) (rectangleSolid (ts*1.2) (ts*1.2))
+                             , translate 0 0 $ color white $ scale 0.3 0.3 $ text (show (round t)) ]
+  EShell t False -> pictures [ color (makeColorI 0 0 255 255) (rectangleSolid ts ts)
+                             , translate 0 0 $ color white $ scale 0.3 0.3 $ text (show (round t)) ]
   _              -> drawLiveKoopa
 
 drawLiveKoopa :: Picture
@@ -318,21 +317,6 @@ drawLiveKoopa = pictures
   , color black  (translate  (6) (ts*0.28) (circleSolid 2))
   ]
 
-drawStationaryShell :: Picture
-drawStationaryShell = pictures
-  [ color (makeColorI 0 160 0 255) (rectangleSolid (ts*0.7) (ts*0.5))
-  , color (makeColorI 180 180 100 255) (translate 0 (ts*0.15) (circleSolid (ts*0.2)))
-  , color (makeColorI 0 120 0 255) (scale (ts*0.3) (ts*0.2) (circleSolid 1))
-  ]
-
-drawMovingShell :: Picture
-drawMovingShell = pictures
-  [ color (makeColorI 0 200 0 255) (rectangleSolid (ts*0.7) (ts*0.5))
-  , color (makeColorI 220 220 120 255) (translate 0 (ts*0.15) (circleSolid (ts*0.2)))
-  , color (makeColorI 0 150 0 255) (scale (ts*0.3) (ts*0.2) (circleSolid 1))
-  ]
-
--- Piranha Plant sprite
 drawPiranha :: Picture
 drawPiranha = pictures
   [ color (makeColorI 0 180 0 255) (circleSolid (ts*0.45))
@@ -345,6 +329,7 @@ drawPiranha = pictures
   , color (makeColorI 0 200 0 255) (translate (-ts*0.3) (-ts*0.1) (ellipseS (ts*0.2) (ts*0.15)))
   , color (makeColorI 0 200 0 255) (translate (ts*0.3) (-ts*0.1) (ellipseS (ts*0.2) (ts*0.15)))
   ]
+
 drawPups :: [PUp] -> Picture
 drawPups = pictures . map drawPup
 

@@ -1,21 +1,21 @@
-module Enemy (stepEnemy, collideEnemies) where
+module Enemy (stepEnemy, collideEnemies, handleShellEnemyCollisions) where
 
 import Constants (ts, grav)
 import Types
 import Physics (hit, mBB, tBB, eBB, solid)
+import Debug.Trace (trace)
 
 stepEnemy :: Float -> [Tile] -> Enemy -> Enemy
 stepEnemy dt sol e = case eState e of
   EAlive      -> stepAlive dt sol e
   EDead timer -> let t' = timer - dt
-                 in if t' <= 0
-                    then e { eState = EDead 0 }
-                    else e { eState = EDead t' }
+                 in if t' <= 0 then e { eState = EDead 0 }
+                               else e { eState = EDead t' }
   EShell timer moving ->
     let t' = timer - dt
         e' = if moving then stepShellMoving dt sol e else stepShellStationary dt sol e
     in if t' <= 0
-       then e' { eState = EDead 0 }
+       then trace "Shell expired, reverting to alive" e' { eState = EAlive, eVX = -70, eVY = 0 }
        else e' { eState = EShell t' moving }
   EPiranha timer up ->
     let t' = timer - dt
@@ -28,7 +28,7 @@ stepEnemy dt sol e = case eState e of
 
 stepAlive :: Float -> [Tile] -> Enemy -> Enemy
 stepAlive dt sol e
-  | eType e == Piranha = e  -- Piranha handled by EPiranha state
+  | eType e == Piranha = e
   | otherwise = e { eX = ex', eVX = vx', eY = ey', eVY = vy' }
   where
     ex0   = eX e + eVX e * dt
@@ -69,6 +69,22 @@ stepShellMoving dt sol e = e { eX = ex', eVX = vx', eY = ey', eVY = vy' }
     onG   = any (hit (ex'+ts/2, ey0+ts/2, ts*0.7, ts*0.7) . tBB) sol
     (ey', vy') = if onG then (eY e, 0) else (ey0, vy0)
 
+handleShellEnemyCollisions :: [Enemy] -> [Enemy]
+handleShellEnemyCollisions es = map killIfCollided es
+  where
+    killIfCollided e = case eState e of
+      EShell _ True -> e
+      _ -> if any (doesKill e) es
+           then e { eState = EDead 0.5 }
+           else e
+
+    doesKill victim shell = case eState shell of
+      EShell _ True -> hit (eBB shell) (eBB victim)
+      _ -> False
+
+marioHalfHeight :: Mario -> Float
+marioHalfHeight m = if mState m == Big then ts else ts/2
+
 collideEnemies :: Mario -> [Enemy] -> Int -> Bool -> (Mario, [Enemy], Int)
 collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
   where
@@ -82,56 +98,63 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
       _       -> False
 
     handleCollision mario e acc s
+      -- Stomp: Mario falling onto enemy
+      | mY mario > eY e + ts*0.55 && mVY mario < 50 =
+          let bounce = bounceVel jumpHeld
+              marioBounce = mario { mY = eY e + ts*0.55 + marioHalfHeight mario, mVY = bounce }
+          in case eType e of
+            Goomba -> ( marioBounce { mInv = 0.3 }
+                      , e { eState = EDead 0.5 } : acc, s + 100 )
+            Koopa -> case eState e of
+              EAlive ->
+                trace "Stomp: Koopa -> stationary shell" $
+                ( marioBounce { mInv = 0.5 }
+                , e { eState = EShell 15.0 False } : acc, s + 100 )   -- longer shell life
+              EShell _ False ->
+                -- Bounce on stationary shell: tiny invincibility
+                ( marioBounce { mInv = 0.05 }, e:acc, s )
+              EShell _ True ->
+                ( marioBounce { mInv = 0.5 }
+                , e { eState = EShell 15.0 False } : acc, s + 100 )
+              _ -> (mario, e:acc, s)
+            Piranha -> hurtMario mario e acc s
+
+      -- Kick stationary shell: log EVERY collision
+      | eType e == Koopa && isStationaryShell e =
+          trace ("!!! Collision with stationary shell! mInv=" ++ show (mInv mario) ++
+                 " mX=" ++ show (mX mario) ++ " eX=" ++ show (eX e)) $
+          if mInv mario <= 0.05   -- very small threshold
+            then let dir = if mX mario < eX e then 1 else -1
+                     kickSpeed = 600 * fromIntegral dir
+                     shellX = eX e + fromIntegral dir * 40
+                     kicked = e { eState = EShell 15.0 True, eX = shellX, eVX = kickSpeed, eVY = 150 }
+                     mario' = mario { mX = mX mario + fromIntegral (-dir) * 40
+                                    , mVY = 180
+                                    , mGround = False
+                                    , mInv = 0.8 }
+                 in trace ("***** KICK! dir=" ++ show dir ++ " *****") (mario', kicked:acc, s + 200)
+            else trace ("Kick blocked by invincibility: " ++ show (mInv mario)) (mario, e:acc, s)
+
       | mInv mario > 0 = (mario, e:acc, s)
 
-      -- Mario lands on top of enemy
-      | mY mario > eY e + ts*0.55 && mVY mario < 50 =
-          case eType e of
-            Goomba ->
-              ( mario { mVY = bounceVel jumpHeld }
-              , e { eState = EDead 0.5 } : acc
-              , s + 100 )
-            Koopa ->
-              case eState e of
-                EAlive ->
-                  ( mario { mVY = bounceVel jumpHeld }
-                  , e { eState = EShell 8.0 False } : acc
-                  , s + 100 )
-                EShell _ False ->
-                  -- stationary shell: bounce but no score or state change
-                  ( mario { mVY = bounceVel jumpHeld }, e:acc, s )
-                EShell _ True ->
-                  -- moving shell: stops it and gives points
-                  ( mario { mVY = bounceVel jumpHeld }
-                  , e { eState = EShell 8.0 False } : acc
-                  , s + 100 )
-                _ -> (mario, e:acc, s)
-            Piranha ->
-              hurtMario mario e acc s
+      | isDangerous e = hurtMario mario e acc s
 
-      -- Mario kicks stationary Koopa shell from side
-      | eType e == Koopa &&
-        case eState e of EShell _ False -> True; _ -> False =
-          let dir = if mX mario < eX e then 1 else -1
-              kicked = e { eState = EShell 8.0 True, eVX = 400 * fromIntegral dir }
-          in (mario, kicked:acc, s + 200)
+      | otherwise = (mario, e:acc, s)
 
-      -- Mario hit by moving shell
-      | eType e == Koopa &&
-        case eState e of EShell _ True -> True; _ -> False =
-          hurtMario mario e acc s
-
-      -- Normal enemy contact (side/bottom)
-      | otherwise = hurtMario mario e acc s
+    isStationaryShell e = case eState e of EShell _ False -> True; _ -> False
+    isDangerous e = case eState e of
+                      EAlive -> True
+                      EShell _ True -> True
+                      _ -> False
 
     hurtMario mario e acc s
       | mState mario == Big =
           let knockbackDir = if mX mario < eX e then -1 else 1
-              knockbackX = 200 * fromIntegral knockbackDir
+              knockbackX = 240 * fromIntegral knockbackDir
           in ( mario { mState = Small, mInv = 2.0, mVX = knockbackX }
              , e:acc, s )
       | otherwise =
           ( mario { mState = MDead, mVY = 500, mVX = 0 }, e:acc, s )
 
-    bounceVel True  = 500
-    bounceVel False = 340
+    bounceVel True  = 520
+    bounceVel False = 360
