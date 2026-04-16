@@ -14,7 +14,7 @@ mkRect :: TType -> Int -> Int -> Int -> Int -> [Tile]
 mkRect t c1 c2 r1 r2 = [Tile c r t | c <- [c1..c2], r <- [r1..r2]]
 
 mkGround :: Int -> Int -> [Tile]
-mkGround c1 c2 = mkRow Ground 0 c1 c2 ++ mkRow Ground (-1) c1 c2
+mkGround c1 c2 = concatMap (\r -> mkRow Ground r c1 c2) [0, -1, -2, -3, -4]
 
 mkCeiling :: Int -> Int -> Int -> [Tile]
 mkCeiling r c1 c2 = mkRow Brick r c1 c2

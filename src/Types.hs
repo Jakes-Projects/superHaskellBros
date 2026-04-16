@@ -76,6 +76,7 @@ data GS = GS
   , gLevelIdx :: Int
   , gLevels   :: [Level]
   , gFirebars :: [Firebar]
+  , gTimer    :: Float
   } deriving Show
 
 type BB = (Float,Float,Float,Float)

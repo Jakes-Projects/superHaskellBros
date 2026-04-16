@@ -37,7 +37,7 @@ stepAlive dt sol e
     ex1   = if wallX then eX e else max 0 ex0
 
     aheadX = ex1 + (if vx1 > 0 then ts else -ts)
-    probe  = (aheadX+ts/2, eY e-ts/4, ts*0.5, ts*0.5)
+    probe  = (aheadX+ts/2, eY e-ts/4, ts*0.5, ts*0.75)
     edge   = not (any (hit probe . tBB) sol)
     vx2    = if edge then -vx1 else vx1
     ex'    = ex1

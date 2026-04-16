@@ -1,4 +1,5 @@
 cabal-version: 3.12
+
 name:          mario-game
 version:       0.1.0.0
 synopsis:      Super Mario Bros. clone in Haskell
@@ -6,9 +7,14 @@ license:       MIT
 author:        Ayman Hassen, Jake Alsept
 build-type:    Simple
 
+data-files:    assets/*.png
+
 executable mario
   main-is:          Main.hs
-  other-modules:    Constants, Types, Physics, Mario, Enemy, PowerUp, Level, Rendering, GameState
+  other-modules:    Constants, Types, Physics, Mario, Enemy,
+                    PowerUp, Level, Rendering, GameState
   hs-source-dirs:   app, src
-  build-depends:    base >=4.14, gloss
+  build-depends:    base >=4.14,
+                    gloss,
+                    gloss-juicy
   default-language: Haskell2010

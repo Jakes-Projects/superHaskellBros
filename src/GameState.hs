@@ -19,12 +19,13 @@ initGS =
         , gCoins    = lCoins startLevel
         , gScore    = 0
         , gLives    = 3
-        , gCam      = 0
+        , gCam      = lStartX startLevel
         , gKeys     = KS False False False False
         , gPhase    = Play
         , gLevelIdx = 0
         , gLevels   = allLevels
         , gFirebars = lFirebars startLevel
+        , gTimer    = 400
         }
 
 loadLevel :: Int -> GS -> GS
@@ -37,7 +38,7 @@ loadLevel idx gs
             , gPups     = lPups lvl
             , gCoins    = lCoins lvl
             , gFirebars = lFirebars lvl
-            , gCam      = 0
+            , gCam      = lStartX lvl     -- centre camera on Mario for new level
             , gPhase    = Play
             , gLevelIdx = idx
             }
@@ -62,7 +63,9 @@ step dt gs
     m4  = m1 { mAnim = mAnim m1 + dt
               , mInv = max 0 (mInv m1 - dt) }
 
-    cam = max (gCam gs) (mX m4 - fromIntegral sW * 0.35)
+    -- Keep Mario horizontally centred: cam tracks mX exactly, never going back.
+    -- Mario's screen x = mX - cam = 0 (Gloss centre) at all times once scrolling.
+    cam = max (gCam gs) (mX m4)
 
     es1 = map (stepEnemy dt sol) (gEnem gs)
     es1' = handleShellEnemyCollisions es1
@@ -90,6 +93,8 @@ step dt gs
         | otherwise = ph
 
     fb1 = map (stepFirebar dt) (gFirebars gs)
+    -- Timer counts down at 1 per second (dt is in seconds)
+    newTimer = max 0 (gTimer gs - dt)
 
     gsTemp = gs { gMario = m7
                 , gTiles = ts2
@@ -100,7 +105,8 @@ step dt gs
                 , gLives = if ph /= Play then max 0 (gLives gs - 1) else gLives gs
                 , gCam   = cam
                 , gPhase = ph2
-                , gFirebars = fb1 }
+                , gFirebars = fb1
+                , gTimer = newTimer }
 
     gs' = case ph2 of
             LevelComplete -> advanceToNextLevel gsTemp
@@ -117,9 +123,10 @@ advanceToNextLevel gs =
                 , gPups     = lPups nextLvl
                 , gCoins    = lCoins nextLvl
                 , gFirebars = lFirebars nextLvl
-                , gCam      = 0
+                , gCam      = lStartX nextLvl   -- centre on Mario
                 , gPhase    = Play
                 , gLevelIdx = nextIdx
+                , gTimer    = 400
                 }
      else gs { gPhase = Win }
 
