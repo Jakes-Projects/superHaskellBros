@@ -18,17 +18,18 @@ eBB :: Enemy -> BB
 eBB e = (eX e + ts/2, eY e + ts/2, ts*0.78, ts*0.78)
 
 solid :: TType -> Bool
-solid Ground   = True
-solid Brick    = True
-solid QBlock   = True
-solid Used     = True
-solid PipeTop  = True
-solid Pipe     = True
-solid PipeR    = False
-solid FlagBase = True
-solid Castle   = True
-solid Axe      = False
-solid _        = False
+solid Ground      = True
+solid Brick       = True
+solid QBlock      = True
+solid Used        = True
+solid PipeTop     = True
+solid Pipe        = True
+solid PipeR       = False
+solid FlagBase    = True
+solid Castle      = True
+solid Axe         = False
+solid FirebarTile = False   -- renamed
+solid _           = False
 
 -- | Sub-stepping physics: number of steps proportional to speed
 physicsMario :: Float -> [Tile] -> Mario -> Mario

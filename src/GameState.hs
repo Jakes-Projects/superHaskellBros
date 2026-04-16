@@ -10,22 +10,23 @@ import PowerUp (bumpBlocks, stepPup, grabPups, pickCoins)
 import Level (allLevels, initMarioFromLevel)
 
 initGS :: GS
-initGS = let startLevel = allLevels !! 0
-         in GS { gMario    = initMarioFromLevel startLevel
-               , gTiles    = lTiles startLevel
-               , gEnem     = lEnemies startLevel
-               , gPups     = lPups startLevel
-               , gCoins    = lCoins startLevel
-               , gScore    = 0
-               , gLives    = 3
-               , gCam      = 0
-               , gKeys     = KS False False False False
-               , gPhase    = Play
-               , gLevelIdx = 0
-               , gLevels   = allLevels
-               }
+initGS =
+  let startLevel = allLevels !! 0
+  in GS { gMario    = initMarioFromLevel startLevel
+        , gTiles    = lTiles startLevel
+        , gEnem     = lEnemies startLevel
+        , gPups     = lPups startLevel
+        , gCoins    = lCoins startLevel
+        , gScore    = 0
+        , gLives    = 3
+        , gCam      = 0
+        , gKeys     = KS False False False False
+        , gPhase    = Play
+        , gLevelIdx = 0
+        , gLevels   = allLevels
+        , gFirebars = lFirebars startLevel
+        }
 
--- Load a specific level by index (0‑based)
 loadLevel :: Int -> GS -> GS
 loadLevel idx gs
   | idx >= 0 && idx < length (gLevels gs) =
@@ -35,11 +36,15 @@ loadLevel idx gs
             , gEnem     = lEnemies lvl
             , gPups     = lPups lvl
             , gCoins    = lCoins lvl
+            , gFirebars = lFirebars lvl
             , gCam      = 0
             , gPhase    = Play
             , gLevelIdx = idx
             }
   | otherwise = gs
+
+stepFirebar :: Float -> Firebar -> Firebar
+stepFirebar dt fb = fb { fbAngle = fbAngle fb + fbSpeed fb * dt }
 
 step :: Float -> GS -> GS
 step dt gs
@@ -84,6 +89,8 @@ step dt gs
         | ph == Play && mX m7 >= endX = LevelComplete
         | otherwise = ph
 
+    fb1 = map (stepFirebar dt) (gFirebars gs)
+
     gsTemp = gs { gMario = m7
                 , gTiles = ts2
                 , gEnem  = es3
@@ -92,7 +99,8 @@ step dt gs
                 , gScore = sc4
                 , gLives = if ph /= Play then max 0 (gLives gs - 1) else gLives gs
                 , gCam   = cam
-                , gPhase = ph2 }
+                , gPhase = ph2
+                , gFirebars = fb1 }
 
     gs' = case ph2 of
             LevelComplete -> advanceToNextLevel gsTemp
@@ -108,6 +116,7 @@ advanceToNextLevel gs =
                 , gEnem     = lEnemies nextLvl
                 , gPups     = lPups nextLvl
                 , gCoins    = lCoins nextLvl
+                , gFirebars = lFirebars nextLvl
                 , gCam      = 0
                 , gPhase    = Play
                 , gLevelIdx = nextIdx
@@ -116,15 +125,13 @@ advanceToNextLevel gs =
 
 handleEv :: Event -> GS -> GS
 handleEv (EventKey (Char 'r') Down _ _) _ = initGS
--- Level select keys (1-4) for quick testing
 handleEv (EventKey (Char d) Down _ _) gs
-  | d >= '1' && d <= '4' = loadLevel (digitToInt d - 1) gs
-  where digitToInt c = fromEnum c - fromEnum '0'
+  | d >= '1' && d <= '4' = loadLevel (fromEnum d - fromEnum '1') gs
 handleEv _ gs | gPhase gs /= Play = gs
 handleEv ev gs = case ev of
   EventKey k Down _ _ -> gs { gMario = tryJump' k (gMario gs)
-                             , gKeys  = setK k True  (gKeys gs) }
-  EventKey k Up   _ _ -> gs { gKeys  = setK k False (gKeys gs) }
+                            , gKeys  = setK k True  (gKeys gs) }
+  EventKey k Up   _ _  -> gs { gKeys  = setK k False (gKeys gs) }
   _ -> gs
   where
     setK (Char 'a')             v k = k { kL   = v }

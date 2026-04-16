@@ -25,8 +25,12 @@ draw gs = pictures
       , drawCoins (gCoins gs)
       , drawPups  (gPups  gs)
       , drawEnem  (gEnem  gs)
+      , drawFirebars (gFirebars gs)   -- add this line
       , drawMario (gMario gs)
       ]
+
+drawFirebars :: [Firebar] -> Picture
+drawFirebars = pictures . map drawFirebar
 
 drawSky :: Picture
 drawSky = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
@@ -126,7 +130,7 @@ drawAxe = pictures
   [ color (makeColorI 139 69 19 255) (translate 0 (-8) (rectangleSolid 6 20))   -- handle
   , color (makeColorI 255 215 0 255) (translate 0 8 (polygon [(-10,0),(10,0),(0,12)])) -- blade
   ]
-  
+
 drawGround :: Picture
 drawGround = pictures
   [ color groundBrown (rectangleSolid ts ts)
@@ -336,6 +340,20 @@ drawPiranha = pictures
   , color (makeColorI 0 200 0 255) (translate (-ts*0.3) (-ts*0.1) (ellipseS (ts*0.2) (ts*0.15)))
   , color (makeColorI 0 200 0 255) (translate (ts*0.3) (-ts*0.1) (ellipseS (ts*0.2) (ts*0.15)))
   ]
+
+drawFirebar :: Firebar -> Picture
+drawFirebar fb = pictures
+  [ drawFireball (fbX fb + dx) (fbY fb + dy)
+  | i <- [0..fbLength fb - 1]
+  , let spacing = ts * 0.8
+        angle = fbAngle fb
+        dx = spacing * fromIntegral i * cos angle
+        dy = spacing * fromIntegral i * sin angle
+  ]
+
+drawFireball :: Float -> Float -> Picture
+drawFireball x y = translate x y $
+  color (makeColorI 255 100 0 255) (circleSolid (ts*0.3))
 
 drawPups :: [PUp] -> Picture
 drawPups = pictures . map drawPup

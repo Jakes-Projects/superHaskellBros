@@ -4,8 +4,8 @@ import Graphics.Gloss
 
 data TType = Ground | Brick | QBlock | Used
            | Pipe | PipeTop | PipeR | FlagPole | FlagBase | Castle
-           | SlopeLeft | SlopeRight | Axe
-  deriving (Eq, Show)
+           | SlopeLeft | SlopeRight | Axe | FirebarTile
+           deriving (Eq, Show)
 
 data Tile = Tile { tCol :: Int, tRow :: Int, tType :: TType } deriving Show
 
@@ -42,20 +42,26 @@ data KS = KS { kL, kR, kJ, kRun :: Bool } deriving Show
 
 data Phase = Play | Over | Win | LevelComplete deriving (Eq, Show)
 
--- NEW: Level definition
 data Level = Level
-  { lTiles   :: [Tile]
-  , lEnemies :: [Enemy]
-  , lCoins   :: [(Float,Float,Bool)]
-  , lPups    :: [PUp]               -- initial power‑ups (e.g., hidden in blocks)
-  , lStartX  :: Float
-  , lStartY  :: Float
-  , lEndX    :: Float               -- X position of flagpole / goal
-  , lWorld   :: Int
-  , lNumber  :: Int
+  { lTiles    :: [Tile]
+  , lEnemies  :: [Enemy]
+  , lCoins    :: [(Float,Float,Bool)]
+  , lPups     :: [PUp]
+  , lFirebars :: [Firebar]
+  , lStartX   :: Float
+  , lStartY   :: Float
+  , lEndX     :: Float
+  , lWorld    :: Int
+  , lNumber   :: Int
   } deriving Show
 
--- Game state extended with current level index
+data Firebar = Firebar
+  { fbX, fbY :: Float
+  , fbAngle  :: Float
+  , fbSpeed  :: Float
+  , fbLength :: Int
+  } deriving Show
+
 data GS = GS
   { gMario    :: Mario
   , gTiles    :: [Tile]
@@ -67,8 +73,9 @@ data GS = GS
   , gCam      :: Float
   , gKeys     :: KS
   , gPhase    :: Phase
-  , gLevelIdx :: Int                -- index into level list
-  , gLevels   :: [Level]            -- all levels
+  , gLevelIdx :: Int
+  , gLevels   :: [Level]
+  , gFirebars :: [Firebar]
   } deriving Show
 
 type BB = (Float,Float,Float,Float)
