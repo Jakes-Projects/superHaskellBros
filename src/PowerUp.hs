@@ -15,16 +15,25 @@ bumpBlocks m vy tls pus sc
     (tls', pus', sc') = case bumped of
       []    -> (tls, pus, sc)
       (t:_) -> case tType t of
-        QBlock ->
-          let tls2 = map (\x -> if samePos x t then x { tType = Used } else x) tls
-              pu0  = PUp (fromIntegral (tCol t) * ts)
-                         (fromIntegral (tRow t + 1) * ts + ts * 0.5)
-                         120 True
-          in (tls2, pu0:pus, sc + 50)
+        QBlock -> spawn t
+        Hidden -> spawn t
         Brick | mState m == Big ->
           let tls2 = filter (\x -> not (samePos x t)) tls
           in (tls2, pus, sc + 50)
         _ -> (tls, pus, sc)
+
+    spawn t =
+      let tls2 = map (\x -> if samePos x t then x { tType = Used } else x) tls
+          ptype = case (tCol t, tRow t) of
+                    (16,3) -> Mushroom
+                    (22,7) -> OneUp      -- hidden 1‑up
+                    (79,7) -> Starman    -- star block
+                    _      -> Mushroom
+          pu0 = PUp (fromIntegral (tCol t) * ts)
+                    (fromIntegral (tRow t + 1) * ts + ts * 0.5)
+                    120 True ptype
+      in (tls2, pu0:pus, sc + 50)
+
     samePos a b = tCol a == tCol b && tRow a == tRow b
 
 stepPup :: Float -> [Tile] -> PUp -> PUp
@@ -40,14 +49,24 @@ stepPup dt sol p
     y'  = if onG then pY p else y0
     vy' = if onG then 0 else vy0
 
-grabPups :: Mario -> [PUp] -> Int -> (Mario,[PUp],Int)
-grabPups m ps sc = foldr go (m,[],sc) ps
+grabPups :: Mario -> [PUp] -> Int -> (Mario, [PUp], Int, Int)   -- returns (Mario, pups, score, livesDelta)
+grabPups m ps sc = foldr go (m, [], sc, 0) ps
   where
-    go p (mario,acc,s)
-      | not (pAlive p) = (mario, p:acc, s)
+    go p (mario, acc, s, livesDelta)
+      | not (pAlive p) = (mario, p:acc, s, livesDelta)
       | hit (mBB mario) (pX p+ts/2, pY p, ts*0.85, ts*0.85) =
-          (mario { mState=Big }, p { pAlive=False }:acc, s+1000)
-      | otherwise = (mario, p:acc, s)
+          let (newMario, addScore, extraLives) = applyPUp mario (pType p)
+          in (newMario, p { pAlive=False }:acc, s + addScore, livesDelta + extraLives)
+      | otherwise = (mario, p:acc, s, livesDelta)
+
+    applyPUp mario Mushroom =
+      if mState mario == Small then (mario { mState = Big }, 1000, 0) else (mario, 1000, 0)
+    applyPUp mario FireFlower =
+      (mario { mState = Fire }, 1000, 0)
+    applyPUp mario Starman =
+      (mario { mState = Star 10.0, mInv = 10.0 }, 1000, 0)
+    applyPUp mario OneUp =
+      (mario, 0, 1)
 
 pickCoins :: BB -> [(Float,Float,Bool)] -> Int -> ([(Float,Float,Bool)],Int)
 pickCoins mb cs sc = foldr go ([],sc) cs

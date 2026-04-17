@@ -153,6 +153,8 @@ draw spr gs = return $ pictures
       , drawCoins   spr clock (gCoins gs)
       , drawPups    spr       (gPups  gs)
       , drawFirebars          (gFirebars gs)
+      , drawFireballs         (gEnemyFireballs gs)
+      , drawFireballs         (gMarioFireballs gs)
       , drawEnem    spr clock (gEnem  gs)
       , drawMario   spr       (gMario gs)
       ]
@@ -260,6 +262,7 @@ drawEnemyBody spr clock e = case eType e of
   Goomba  -> scale marioScale marioScale $ goombaFrame spr clock
   Koopa   -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr clock e
   Piranha -> translate 0 (ts * 0.6) drawPiranha
+  Bowser -> scale marioScale marioScale (drawBowser spr clock e)
 
 -- Koopa sprite faces right by default. Flip when moving left (eVX < 0).
 koopaFace :: Enemy -> Float
@@ -282,6 +285,12 @@ koopaFrame spr clock e = case eState e of
     if even (floor (clock * 8) :: Int)
       then spKoopa1 spr
       else spKoopa2 spr
+
+drawBowser :: Sprites -> Float -> Enemy -> Picture
+drawBowser spr clock e = pictures
+  [ color (makeColorI 200 100 0 255) (rectangleSolid (ts*1.5) (ts*1.5))
+  , color (makeColorI 255 200 0 255) (translate 0 (ts*0.4) (circleSolid (ts*0.5)))
+  ]     
 
 -- ─── Primitives kept from original (no sprites available yet) ─────────────────
 
@@ -463,23 +472,32 @@ drawPiranha = pictures
       (translate (ts*0.3) (-ts*0.1) (scale (ts*0.2) (ts*0.15) (circleSolid 1)))
   ]
 
--- Firebars — no sprite, keep primitive
+-- Firebars — no sprite, keep primitive (for now)
+drawFireballs :: [Fireball] -> Picture
+drawFireballs = pictures . map drawFireball'
+
+drawFireball' :: Fireball -> Picture
+drawFireball' fb
+  | not (fbAlive fb) = blank
+  | otherwise = translate (fbx fb) (fby fb) $
+      color (makeColorI 255 100 0 255) (circleSolid (ts*0.4))
+
 drawFirebars :: [Firebar] -> Picture
 drawFirebars = pictures . map drawFirebar
-
-drawFirebar :: Firebar -> Picture
-drawFirebar fb = pictures
-  [ drawFireball (fbX fb + dx) (fbY fb + dy)
-  | i <- [0..fbLength fb - 1]
-  , let spacing = ts * 0.8
-        angle   = fbAngle fb
-        dx = spacing * fromIntegral i * cos angle
-        dy = spacing * fromIntegral i * sin angle
-  ]
 
 drawFireball :: Float -> Float -> Picture
 drawFireball x y =
   translate x y $ color (makeColorI 255 100 0 255) (circleSolid (ts*0.3))
+
+drawFirebar :: Firebar -> Picture
+drawFirebar fb = pictures
+  [ drawFireball' (Fireball (fbX fb + dx) (fbY fb + dy) 0 0 True)
+  | i <- [0..fbLength fb - 1]
+  , let spacing = ts * 0.8
+        angle = fbAngle fb
+        dx = spacing * fromIntegral i * cos angle
+        dy = spacing * fromIntegral i * sin angle
+  ] 
 
 -- Power-ups — now sprite-based
 drawPups :: Sprites -> [PUp] -> Picture

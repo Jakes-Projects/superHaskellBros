@@ -30,6 +30,7 @@ solid Castle      = True
 solid Axe         = False
 solid FirebarTile = False   -- renamed
 solid Step        = True
+solid Hidden = True
 solid _           = False
 
 -- | Sub-stepping physics: number of steps proportional to speed

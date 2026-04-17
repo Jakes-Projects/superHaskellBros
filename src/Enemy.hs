@@ -5,18 +5,20 @@ import Types
 import Physics (hit, mBB, tBB, eBB, solid)
 import Debug.Trace (trace)
 
-stepEnemy :: Float -> [Tile] -> Enemy -> Enemy
+-- | Update an enemy, returning the updated enemy and a list of spawned fireballs.
+stepEnemy :: Float -> [Tile] -> Enemy -> (Enemy, [Fireball])
 stepEnemy dt sol e = case eState e of
-  EAlive      -> stepAlive dt sol e
+  EAlive      -> (stepAlive dt sol e, [])
   EDead timer -> let t' = timer - dt
-                 in if t' <= 0 then e { eState = EDead 0 }
-                               else e { eState = EDead t' }
+                     e' = if t' <= 0 then e { eState = EDead 0 } else e { eState = EDead t' }
+                 in (e', [])
   EShell timer moving ->
     let t' = timer - dt
         e' = if moving then stepShellMoving dt sol e else stepShellStationary dt sol e
-    in if t' <= 0
-       then trace "Shell expired, reverting to alive" e' { eState = EAlive, eVX = -70, eVY = 0 }
-       else e' { eState = EShell t' moving }
+        e'' = if t' <= 0
+              then trace "Shell expired, reverting to alive" e' { eState = EAlive, eVX = -70, eVY = 0 }
+              else e' { eState = EShell t' moving }
+    in (e'', [])
   EPiranha timer up ->
     let t' = timer - dt
         (newUp, newTimer) = if t' <= 0
@@ -24,7 +26,28 @@ stepEnemy dt sol e = case eState e of
                             else (up, t')
         baseY = fromIntegral (floor (eY e / ts)) * ts
         targetY = if newUp then baseY + ts else baseY
-    in e { eState = EPiranha newTimer newUp, eY = targetY }
+        e' = e { eState = EPiranha newTimer newUp, eY = targetY }
+    in (e', [])
+  EBowser shootTimer dir ->
+    let t' = shootTimer - dt
+        (newTimer, mbFireball) = if t' <= 0
+                                 then (2.0, Just (spawnFireball e dir))
+                                 else (t', Nothing)
+        ex0 = eX e + dir * 50 * dt
+        wallX = any (hit (ex0+ts/2, eY e+ts/2, ts*1.2, ts*1.2) . tBB) sol
+        newDir = if wallX then -dir else dir
+        ex' = if wallX then eX e else max 0 ex0
+        e' = e { eX = ex', eVX = newDir * 50, eState = EBowser newTimer newDir }
+    in (e', maybe [] (:[]) mbFireball)
+
+spawnFireball :: Enemy -> Float -> Fireball
+spawnFireball e dir =
+  Fireball { fbx = eX e + ts/2 + dir * 20
+           , fby = eY e + ts*0.8
+           , fbvx = dir * 200
+           , fbvy = 150
+           , fbAlive = True
+           }
 
 stepAlive :: Float -> [Tile] -> Enemy -> Enemy
 stepAlive dt sol e
@@ -45,9 +68,6 @@ stepAlive dt sol e
 
     vy0   = eVY e + grav * dt
     ey0   = eY e + vy0 * dt
-    -- Use tile-boundary crossing: did the enemy's bottom (eY) cross a tile top going down?
-    -- This is stable — once landed at tileTop, gravity moves ey0 just below,
-    -- which triggers the check again next frame → stays snapped cleanly.
     landTiles = filter (\t -> let tTop = fromIntegral (tRow t) * ts + ts
                               in eY e >= tTop && ey0 < tTop
                                  && abs (ex' + ts/2 - (fromIntegral (tCol t)*ts + ts/2)) < ts)
@@ -122,21 +142,23 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
               EAlive ->
                 trace "Stomp: Koopa -> stationary shell" $
                 ( marioBounce { mInv = 0.5 }
-                , e { eState = EShell 15.0 False } : acc, s + 100 )   -- longer shell life
+                , e { eState = EShell 15.0 False } : acc, s + 100 )
               EShell _ False ->
-                -- Bounce on stationary shell: tiny invincibility
                 ( marioBounce { mInv = 0.05 }, e:acc, s )
               EShell _ True ->
                 ( marioBounce { mInv = 0.5 }
                 , e { eState = EShell 15.0 False } : acc, s + 100 )
               _ -> (mario, e:acc, s)
             Piranha -> hurtMario mario e acc s
+            Bowser ->
+              ( marioBounce { mInv = 0.5 }
+              , e { eState = EBowser 1.5 (if eVX e < 0 then -1 else 1) } : acc, s + 5000 )
 
-      -- Kick stationary shell: log EVERY collision
+      -- Kick stationary shell
       | eType e == Koopa && isStationaryShell e =
           trace ("!!! Collision with stationary shell! mInv=" ++ show (mInv mario) ++
                  " mX=" ++ show (mX mario) ++ " eX=" ++ show (eX e)) $
-          if mInv mario <= 0.05   -- very small threshold
+          if mInv mario <= 0.05
             then let dir = if mX mario < eX e then 1 else -1
                      kickSpeed = 600 * fromIntegral dir
                      shellX = eX e + fromIntegral dir * 40
@@ -158,6 +180,7 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
     isDangerous e = case eState e of
                       EAlive -> True
                       EShell _ True -> True
+                      EBowser _ _ -> True
                       _ -> False
 
     hurtMario mario e acc s

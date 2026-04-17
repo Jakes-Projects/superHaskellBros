@@ -70,8 +70,8 @@ mkCoins ps =
 
 mkLevel
   :: [Tile] -> [Enemy] -> [(Float,Float,Bool)] -> [PUp] -> [Firebar]
-  -> Float -> Float -> Float -> Int -> Int -> Level
-mkLevel ts_ es cs ps fs sx sy ex w n = Level ts_ es cs ps fs sx sy ex w n
+  -> Float -> Float -> Float -> Int -> Int -> [((Int,Int), WarpDest)] -> Level
+mkLevel ts_ es cs ps fs sx sy ex w n wm = Level ts_ es cs ps fs sx sy ex w n wm
 
 initMarioFromLevel :: Level -> Mario
 initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0
@@ -100,34 +100,34 @@ mkP (c, r) = Enemy (fromIntegral c * ts) (fromIntegral r * ts) 0 0 (EPiranha 0 F
 --------------------------------------------------------------------------------
 
 level1_1 :: Level
-level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 1 1
+level1_1 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*1.5) (204*ts) 1 1 []
   where
     ground = mkGround 0 211
 
     blocks =
-         mkQLine 3 16 16
-      ++ mkQLine 3 21 21
+         mkQLine 3 16 16                     -- mushroom block
+      ++ mkPlatform 3 20 20
+      ++ mkQLine 3 21 21                     -- coin
       ++ mkPlatform 3 22 22
-      ++ mkQLine 3 23 23
+      ++ mkQLine 3 23 23                     -- coin
       ++ mkPlatform 3 24 24
-      ++ mkQLine 7 22 22
-
+      ++ [Tile 22 7 Hidden]                  -- hidden 1-Up (invisible)
       ++ mkPlatform 3 78 78
-      ++ mkQLine 3 79 79
-      ++ mkPlatform 3 80 82
-      ++ mkQLine 7 78 80
-
+      ++ mkQLine 3 79 79                     -- coin
+      ++ mkPlatform 3 80 81
+      ++ mkQLine 3 82 82                     -- coin
+      ++ mkPlatform 3 83 83
+      ++ mkQLine 7 78 80                     -- star in middle ? block
+      ++ mkPlatform 7 81 81
       ++ mkPlatform 3 91 92
-      ++ mkQLine 3 93 93
+      ++ mkQLine 3 93 93                     -- coin
       ++ mkPlatform 3 94 95
-
       ++ mkPlatform 3 100 100
-      ++ mkQLine 3 101 101
+      ++ mkQLine 3 101 101                   -- coin
       ++ mkPlatform 3 102 102
-
       ++ mkPlatform 3 107 109
       ++ mkPlatform 7 107 107
-      ++ mkQLine 7 108 108
+      ++ mkQLine 7 108 108                   -- high ? block (coin)
       ++ mkPlatform 7 109 110
 
     pipes = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(163,2)]
@@ -138,6 +138,11 @@ level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 1 1
 
     tiles = ground ++ blocks ++ pipes ++ stairs ++ finish ++ flag ++ castle
 
+    -- Power-ups placed directly (hidden 1‑Up and star)
+    pups = [ PUp (22*ts) (8*ts + ts*0.5) 120 True OneUp
+           , PUp (79*ts) (8*ts + ts*0.5) 120 True Starman
+           ]
+
     enemies =
          map mkG [20,22,37,40,57,59,80,82,100,102,110,116,150,152]
       ++ map mkK [60,92,130]
@@ -146,12 +151,20 @@ level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 1 1
     coins = mkCoins
       ([(c,2) | c <- [1..4]] ++ [(21,5),(23,5),(79,5),(82,5),(93,5),(101,5),(108,9)])
 
+    firebars = []
+
 --------------------------------------------------------------------------------
 -- World 1-2
 --------------------------------------------------------------------------------
 
+warpMap1_2 :: [((Int,Int), WarpDest)]
+warpMap1_2 = [ ((68,2), (1,2, 100*ts, 3*ts))   -- bonus coin room (same level)
+             , ((72,3), (2,1, 3*ts, 3*ts))     -- warp to World 2-1
+             , ((76,4), (3,1, 3*ts, 3*ts))     -- warp to World 3-1
+             ]
+
 level1_2 :: Level
-level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*3) (208*ts) 1 2
+level1_2 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*3) (208*ts) 1 2 warpMap1_2
   where
     ground = mkGround 0 208
     ceiling = mkCeiling 12 0 208
@@ -169,7 +182,7 @@ level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*3) (208*ts) 1 2
       ++ mkQLine 4 48 49
       ++ mkPlatform 8 48 49
       ++ mkPlatform 7 64 66
-      ++ mkQLine 10 72 72
+      ++ mkQLine 10 72 72      -- warp zone coin blocks
       ++ mkQLine 10 74 74
       ++ mkQLine 10 76 76
       ++ mkPlatform 4 96 97
@@ -188,10 +201,12 @@ level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*3) (208*ts) 1 2
       ++ mkPlatform 8 192 193
 
     pipes = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(100,2),(108,3)]
-    warp  = mkPipeGroup [(68,2),(72,3),(76,4)]
-    exitPipe = mkPipe 203 2 ++ [Tile 203 3 Step, Tile 204 3 Step]
+    warp  = mkPipeGroup [(68,2),(72,3),(76,4)]   -- warp pipes
+    exitPipe = mkPipe 203 2 ++ [Tile 203 3 Brick, Tile 204 3 Brick]
 
     tiles = ground ++ ceiling ++ bricks ++ pipes ++ warp ++ exitPipe
+
+    pups = []   -- no placed power-ups
 
     enemies =
          map mkG [16,18,36,38,52,54,80,82,100,102,120,122,144,146,160,162,180,182]
@@ -202,19 +217,20 @@ level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*3) (208*ts) 1 2
       ([(c,2) | c <- [1..5]] ++ [(16,6),(17,6),(21,6),(22,6)] ++ [(48,6),(49,6)]
        ++ [(96,9),(97,9)] ++ [(144,9),(145,9)] ++ [(176,6),(177,6)])
 
+    firebars = []
+
 --------------------------------------------------------------------------------
 -- World 1-3
 --------------------------------------------------------------------------------
-
 level1_3 :: Level
-level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (244*ts) 1 3
+level1_3 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*5) (244*ts) 1 3 []
   where
     ground = mkGround 0 244
 
     islands =
          mkPlatform 3 10 12 ++ mkPlatform 4 10 12
       ++ mkPlatform 3 16 19 ++ mkPlatform 4 16 19
-      ++ mkPlatform 5 26 29 ++ mkPlatform 5 30 31
+      ++ mkPlatform 5 26 29 ++ mkPlatform 6 26 29   -- raised platforms
       ++ mkPlatform 4 34 36 ++ mkPlatform 5 34 36
       ++ mkPlatform 3 48 50 ++ mkPlatform 4 48 50
       ++ mkPlatform 4 58 60 ++ mkPlatform 5 58 60
@@ -239,9 +255,16 @@ level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (244*ts) 1 3
       ++ mkQLine 6 176 176
       ++ mkQLine 4 208 209
 
-    tiles = ground ++ islands ++ jumps
+    flag = mkFlag 240
+    castle = mkCastle 243
+
+    tiles = ground ++ islands ++ jumps ++ flag ++ castle
+
+    pups = []
+    firebars = []
 
     enemies = map mkG [16,18,50,82,114,146,178,210] ++ map mkK [64,128,192]
+
     coins = mkCoins
       ([(c,4) | c <- [26..29]] ++ [(c,5) | c <- [90..93]] ++ [(c,4) | c <- [122..125]]
        ++ [(c,5) | c <- [154..157]] ++ [(c,4) | c <- [186..189]] ++ [(c,4) | c <- [218..221]]
@@ -252,16 +275,16 @@ level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (244*ts) 1 3
 --------------------------------------------------------------------------------
 
 level1_4 :: Level
-level1_4 = mkLevel tiles enemies coins [] firebars (ts*3) (ts*3) (80*ts) 1 4
+level1_4 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*3) (80*ts) 1 4 []
   where
     floorA = mkGround 0 15
     floorB = mkGround 20 25
     floorC = mkGround 30 49
     lava   = [Tile c (-2) Ground | c <- [16..19] ++ [26..29]]
 
-    walls  = mkRect Step 0 50 2 10
-          ++ [Tile 0 r Step | r <- [0..10]]
-          ++ [Tile 50 r Step | r <- [0..10]]
+    walls  = mkRect Brick 0 50 2 10
+          ++ [Tile 0 r Brick | r <- [0..10]]
+          ++ [Tile 50 r Brick | r <- [0..10]]
 
     bridge = mkBridge 16 39
     bridgeSupport = mkBridgePosts [16,19,22,25,28,31,34,37]
@@ -279,12 +302,13 @@ level1_4 = mkLevel tiles enemies coins [] firebars (ts*3) (ts*3) (80*ts) 1 4
          ++ stairClimb ++ axe ++ castle
 
     firebars =
-      [ Firebar (34*ts) (3*ts) 0.00 2.4 4
-      , Firebar (58*ts) (3*ts) 1.30 2.0 5
+      [ Firebar (34*ts) (3*ts) 0.0 2.4 4
+      , Firebar (58*ts) (3*ts) 1.3 2.0 5
       ]
 
+    pups = []
     enemies =
-      [ Enemy (25*ts) (ts*2) (-70) 0 EAlive Koopa
+      [ Enemy (25*ts) (ts*2) 0 0 (EBowser 1.5 (-1)) Bowser
       , Enemy (20*ts) (ts*2) (-80) 0 EAlive Goomba
       , Enemy (30*ts) (ts*2) (-80) 0 EAlive Goomba
       ]
