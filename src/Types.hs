@@ -4,7 +4,7 @@ import Graphics.Gloss
 
 data TType = Ground | Brick | QBlock | Used
            | Pipe | PipeTop | PipeR | FlagPole | FlagBase | Castle
-           | SlopeLeft | SlopeRight | Axe | FirebarTile
+           | SlopeLeft | SlopeRight | Axe | FirebarTile | Step
            deriving (Eq, Show)
 
 data Tile = Tile { tCol :: Int, tRow :: Int, tType :: TType } deriving Show

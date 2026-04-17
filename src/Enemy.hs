@@ -45,16 +45,29 @@ stepAlive dt sol e
 
     vy0   = eVY e + grav * dt
     ey0   = eY e + vy0 * dt
-    onG   = any (hit (ex'+ts/2, ey0+ts/2, ts*0.5, ts*0.5) . tBB) sol
-    (ey', vy') = if onG then (eY e, 0) else (ey0, vy0)
+    -- Use tile-boundary crossing: did the enemy's bottom (eY) cross a tile top going down?
+    -- This is stable — once landed at tileTop, gravity moves ey0 just below,
+    -- which triggers the check again next frame → stays snapped cleanly.
+    landTiles = filter (\t -> let tTop = fromIntegral (tRow t) * ts + ts
+                              in eY e >= tTop && ey0 < tTop
+                                 && abs (ex' + ts/2 - (fromIntegral (tCol t)*ts + ts/2)) < ts)
+                       sol
+    onG   = not (null landTiles)
+    snapY = maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles)
+    (ey', vy') = if onG then (snapY, 0) else (ey0, vy0)
 
 stepShellStationary :: Float -> [Tile] -> Enemy -> Enemy
 stepShellStationary dt sol e = e { eY = ey', eVY = vy' }
   where
-    vy0   = eVY e + grav * dt
-    ey0   = eY e + vy0 * dt
-    onG   = any (hit (eX e+ts/2, ey0+ts/2, ts*0.7, ts*0.7) . tBB) sol
-    (ey', vy') = if onG then (eY e, 0) else (ey0, vy0)
+    vy0    = eVY e + grav * dt
+    ey0    = eY e + vy0 * dt
+    landTiles = filter (\t -> let tTop = fromIntegral (tRow t) * ts + ts
+                              in eY e >= tTop && ey0 < tTop
+                                 && abs (eX e + ts/2 - (fromIntegral (tCol t)*ts + ts/2)) < ts)
+                       sol
+    onG    = not (null landTiles)
+    snapY  = if onG then maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles) else ey0
+    (ey', vy') = if onG then (snapY, 0) else (ey0, vy0)
 
 stepShellMoving :: Float -> [Tile] -> Enemy -> Enemy
 stepShellMoving dt sol e = e { eX = ex', eVX = vx', eY = ey', eVY = vy' }

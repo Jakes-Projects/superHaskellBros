@@ -24,11 +24,12 @@ solid QBlock      = True
 solid Used        = True
 solid PipeTop     = True
 solid Pipe        = True
-solid PipeR       = False
+solid PipeR       = True
 solid FlagBase    = True
 solid Castle      = True
 solid Axe         = False
 solid FirebarTile = False   -- renamed
+solid Step        = True
 solid _           = False
 
 -- | Sub-stepping physics: number of steps proportional to speed

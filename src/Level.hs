@@ -17,7 +17,7 @@ mkGround :: Int -> Int -> [Tile]
 mkGround c1 c2 = concatMap (\r -> mkRow Ground r c1 c2) [0, -1, -2, -3, -4]
 
 mkCeiling :: Int -> Int -> Int -> [Tile]
-mkCeiling r c1 c2 = mkRow Brick r c1 c2
+mkCeiling r c1 c2 = mkRow Step r c1 c2
 
 mkPlatform :: Int -> Int -> Int -> [Tile]
 mkPlatform r c1 c2 = mkRow Brick r c1 c2
@@ -38,21 +38,21 @@ mkPipeGroup = concatMap (uncurry mkPipe)
 
 mkStairsUp :: Int -> Int -> [Tile]
 mkStairsUp c h =
-  concat [ [Tile (c+i) r Brick | r <- [1..i+1]]
+  concat [ [Tile (c+i) r Step | r <- [1..i+1]]
          | i <- [0..h-1]
          ]
 
 mkStairsDown :: Int -> Int -> [Tile]
 mkStairsDown c h =
-  concat [ [Tile (c+i) r Brick | r <- [1..(h-i)]]
+  concat [ [Tile (c+i) r Step | r <- [1..(h-i)]]
          | i <- [0..h-1]
          ]
 
 mkBridge :: Int -> Int -> [Tile]
-mkBridge c1 c2 = mkRow Brick 1 c1 c2
+mkBridge c1 c2 = mkRow Step 1 c1 c2
 
 mkBridgePosts :: [Int] -> [Tile]
-mkBridgePosts cols = [Tile c 0 Brick | c <- cols]
+mkBridgePosts cols = [Tile c 0 Step | c <- cols]
 
 mkFlag :: Int -> [Tile]
 mkFlag c = [Tile c r FlagPole | r <- [1..10]] ++ [Tile c 0 FlagBase]
@@ -189,7 +189,7 @@ level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*3) (208*ts) 1 2
 
     pipes = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(100,2),(108,3)]
     warp  = mkPipeGroup [(68,2),(72,3),(76,4)]
-    exitPipe = mkPipe 203 2 ++ [Tile 203 3 Brick, Tile 204 3 Brick]
+    exitPipe = mkPipe 203 2 ++ [Tile 203 3 Step, Tile 204 3 Step]
 
     tiles = ground ++ ceiling ++ bricks ++ pipes ++ warp ++ exitPipe
 
@@ -259,9 +259,9 @@ level1_4 = mkLevel tiles enemies coins [] firebars (ts*3) (ts*3) (80*ts) 1 4
     floorC = mkGround 30 49
     lava   = [Tile c (-2) Ground | c <- [16..19] ++ [26..29]]
 
-    walls  = mkRect Brick 0 50 2 10
-          ++ [Tile 0 r Brick | r <- [0..10]]
-          ++ [Tile 50 r Brick | r <- [0..10]]
+    walls  = mkRect Step 0 50 2 10
+          ++ [Tile 0 r Step | r <- [0..10]]
+          ++ [Tile 50 r Step | r <- [0..10]]
 
     bridge = mkBridge 16 39
     bridgeSupport = mkBridgePosts [16,19,22,25,28,31,34,37]

@@ -44,6 +44,16 @@ data Sprites = Sprites
   , spBlockQuestion1   :: Picture
   , spBlockQuestion2   :: Picture
   , spBlockQuestion3   :: Picture
+  , spBlockStep        :: Picture
+    -- Pipe (single sprite, scaled to fit height)
+  , spPipe             :: Picture
+    -- Decorations
+  , spCloudSingle :: Picture
+  , spCloudDouble :: Picture
+  , spBushSingle  :: Picture
+  , spBushTriple  :: Picture
+  , spHillSmall   :: Picture
+  , spHillLarge   :: Picture
     -- Collectibles
   , spMushroom :: Picture
   , spCoin1    :: Picture
@@ -98,6 +108,16 @@ loadSprites = Sprites
   <*> loadPNG "assets/block_question_1.png"
   <*> loadPNG "assets/block_question_2.png"
   <*> loadPNG "assets/block_question_3.png"
+  <*> loadPNG "assets/block_step.png"
+  -- Pipe
+  <*> loadPNG "assets/pipe.png"
+  -- Decorations
+  <*> loadPNG "assets/cloud_single.png"
+  <*> loadPNG "assets/cloud_double.png"
+  <*> loadPNG "assets/bush_single.png"
+  <*> loadPNG "assets/bush_triple.png"
+  <*> loadPNG "assets/hill_small.png"
+  <*> loadPNG "assets/hill_large.png"
   -- Collectibles
   <*> loadPNG "assets/mushroom.png"
   <*> loadPNG "assets/coin_1.png"
@@ -127,14 +147,18 @@ draw spr gs = return $ pictures
     -- It increments every frame at 60fps so it's a reliable ticker.
     clock = mAnim (gMario gs)
     world = pictures
-      [ drawDecorations
-      , drawTiles   spr clock (gTiles gs)
+      [ drawDecorations spr                                         -- background
+      , drawTilesOfType spr clock isGround   (gTiles gs)           -- ground (covers deco bases)
+      , drawTilesOfType spr clock (not.isGround) (gTiles gs)       -- pipes/blocks on top
       , drawCoins   spr clock (gCoins gs)
       , drawPups    spr       (gPups  gs)
       , drawFirebars          (gFirebars gs)
       , drawEnem    spr clock (gEnem  gs)
       , drawMario   spr       (gMario gs)
       ]
+
+isGround :: Tile -> Bool
+isGround t = tType t == Ground
 
 -- ─── Mario ────────────────────────────────────────────────────────────────────
 
@@ -234,8 +258,12 @@ drawE spr clock e = case eState e of
 drawEnemyBody :: Sprites -> Float -> Enemy -> Picture
 drawEnemyBody spr clock e = case eType e of
   Goomba  -> scale marioScale marioScale $ goombaFrame spr clock
-  Koopa   -> scale marioScale marioScale $ koopaFrame  spr clock e
+  Koopa   -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr clock e
   Piranha -> translate 0 (ts * 0.6) drawPiranha
+
+-- Koopa sprite faces right by default. Flip when moving left (eVX < 0).
+koopaFace :: Enemy -> Float
+koopaFace e = if eVX e >= 0 then 1 else -1
 
 -- Goomba walks with 2 frames, alternating at ~8fps using the global clock.
 -- NES Goomba animates at roughly 8 frames/sec.
@@ -264,10 +292,12 @@ drawSky = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
 skyBlue :: Color
 skyBlue = makeColorI 97 133 248 255
 
--- Decorations (clouds, hills, bushes) — no sprites, keep originals
-ellipseS :: Float -> Float -> Picture
-ellipseS rx ry = scale rx ry (circleSolid 1)
+-- ─── Decorations ─────────────────────────────────────────────────────────────
+-- All decoration sprites are pre-scaled (3x NES native).
+-- We render them at 1:1 (no further scaling) since their pixel size already
+-- matches the world coordinate scale.
 
+-- Cloud positions: (col, y-row, size) where size 1=single, 2=double
 cloudPositions :: [(Float, Float, Int)]
 cloudPositions =
   [ (6,10,1), (24,10,2), (44,10,1), (64,10,2)
@@ -275,62 +305,48 @@ cloudPositions =
   , (154,10,2), (172,10,1), (192,10,1)
   ]
 
-hillPositions :: [(Float, Float)]
-hillPositions = [(0,1),(16,1),(48,1),(80,1),(96,1),(128,1),(160,1),(192,1)]
+-- Hill positions: (col, _). Alternate small/large by index.
+hillPositions :: [(Int, Float, Float)]
+hillPositions = zip3 [0..]
+  [0, 16, 48, 80, 96, 128, 160, 192]
+  (repeat 1)
 
-bushPositions :: [(Float, Float)]
-bushPositions =
-  [ (11,1),(23,1),(35,1),(57,1),(73,1)
-  , (89,1),(105,1),(121,1),(145,1),(170,1),(185,1)
-  ]
+-- Bush positions: (col, _). Alternate single/triple by index.
+bushPositions :: [(Int, Float, Float)]
+bushPositions = zip3 [0..]
+  [11, 23, 35, 57, 73, 89, 105, 121, 145, 170, 185]
+  (repeat 1)
 
-drawDecorations :: Picture
-drawDecorations = pictures $
-  map drawCloud cloudPositions ++
-  map drawHill  hillPositions  ++
-  map drawBush  bushPositions
+drawDecorations :: Sprites -> Picture
+drawDecorations spr = pictures $
+  map (drawCloud spr) cloudPositions ++
+  map (drawHill  spr) hillPositions  ++
+  map (drawBush  spr) bushPositions
 
-drawCloud :: (Float,Float,Int) -> Picture
-drawCloud (c,_r,sz) =
+drawCloud :: Sprites -> (Float, Float, Int) -> Picture
+drawCloud spr (c, _, sz) =
   let x = c * ts + ts/2
       y = 10 * ts
-      w = fromIntegral sz * ts * 1.6
-      h = fromIntegral sz * ts * 0.8
-  in translate x y $ pictures
-       [ color white (rectangleSolid w (h*0.55))
-       , color white (translate (-w*0.2) (h*0.2) (rectangleSolid (w*0.5) (h*0.5)))
-       , color white (translate (w*0.1)  (h*0.25) (rectangleSolid (w*0.45) (h*0.55)))
-       , color (makeColorI 200 200 200 255)
-               (translate 0 (-h*0.1) (rectangleSolid (w*0.9) (h*0.15)))
-       ]
+      pic = if sz == 1 then spCloudSingle spr else spCloudDouble spr
+  in translate x y pic
 
-drawHill :: (Float,Float) -> Picture
-drawHill (c,_) =
-  let x = c * ts + ts
-      y = ts
-      r = ts * 2.8
-      semi n rad = polygon
-        [(rad * cos a, rad * sin a) | i <- [0..n :: Int],
-         let a = pi * fromIntegral i / fromIntegral n]
-  in translate x y $ pictures
-       [ color (makeColorI 0 128 0 255) (semi 16 r)
-       , color (makeColorI 0 160 0 255) (semi 12 (r*0.6))
-       , color (makeColorI 0 100 0 255) $ pictures
-           [ translate (-r*0.35) (r*0.4)  (circleSolid 3)
-           , translate (r*0.35)  (r*0.4)  (circleSolid 3)
-           , translate 0         (r*0.62) (circleSolid 3)
-           ]
-       ]
+drawHill :: Sprites -> (Int, Float, Float) -> Picture
+drawHill spr (idx, c, _) =
+  let x   = c * ts + ts
+      pic = if even idx then spHillSmall spr else spHillLarge spr
+      -- Lower by ts/2 so the base overlaps ground tiles (matches NES look).
+      -- hill_small ≈ 96px tall → half = 48. Center = ts + 48 - ts/2 = 64.
+      -- hill_large ≈ 144px tall → half = 72. Center = ts + 72 - ts/2 = 88.
+      y   = if even idx then ts + 32 else ts + 56
+  in translate x y pic
 
-drawBush :: (Float,Float) -> Picture
-drawBush (c,_) =
-  let x = c * ts
-      y = ts * 0.5
-  in translate x y $ pictures
-       [ color (makeColorI 0 152 0 255) (ellipseS (ts*1.4) (ts*0.7))
-       , color (makeColorI 0 180 0 255) (translate (-ts*0.3) (ts*0.1) (ellipseS (ts*0.9) (ts*0.6)))
-       , color (makeColorI 0 180 0 255) (translate (ts*0.4)  (ts*0.1) (ellipseS (ts*0.8) (ts*0.55)))
-       ]
+drawBush :: Sprites -> (Int, Float, Float) -> Picture
+drawBush spr (idx, c, _) =
+  let x   = c * ts
+      pic = if even idx then spBushSingle spr else spBushTriple spr
+      -- bush ≈ 48px tall → half = 24. Center = ts + 24 - ts/2 = 40.
+      y   = ts + 8
+  in translate x y pic
 
 -- ─── Tiles ────────────────────────────────────────────────────────────────────
 
@@ -345,6 +361,10 @@ drawTiles :: Sprites -> Float -> [Tile] -> Picture
 drawTiles spr clock ts_ =
   pictures (map (drawTile spr clock) ts_)
 
+drawTilesOfType :: Sprites -> Float -> (Tile -> Bool) -> [Tile] -> Picture
+drawTilesOfType spr clock p ts_ =
+  pictures (map (drawTile spr clock) (filter p ts_))
+
 drawTile :: Sprites -> Float -> Tile -> Picture
 drawTile spr clock t = translate tx ty pic
   where
@@ -355,8 +375,21 @@ drawTile spr clock t = translate tx ty pic
       Brick      -> scale tileScale tileScale (spBlockBrick spr)
       QBlock     -> scale tileScale tileScale (qBlockFrame spr clock)
       Used       -> scale tileScale tileScale (spBlockHitEmpty spr)
-      PipeTop    -> drawPipeTop
-      Pipe       -> drawPipe
+      Step       -> scale tileScale tileScale (spBlockStep spr)
+      -- Pipes: pipe.png (48x96) rendered ONCE at PipeTop, covering the full pipe.
+      -- Pipe spans world y = ts (ground surface) to (h+1)*ts (top of PipeTop tile).
+      -- Pipe height = h*ts. Center y = ts + h*ts/2.
+      -- drawTile already translates to ty = h*ts + ts/2 (PipeTop tile centre).
+      -- offsetY = desired_centre - tile_centre = (ts + h*ts/2) - (h*ts + ts/2) = ts*(1-h)/2
+      -- scaleX = 2*ts/48  (two tiles wide)
+      -- scaleY = h*ts/96  (stretches to full pipe height)
+      PipeTop    ->
+        let h       = fromIntegral (tRow t) :: Float
+            scaleX  = 2 * ts / 48
+            scaleY  = h * ts / 96
+            offsetY = ts * (1 - h) / 2
+        in translate (ts/2) offsetY $ scale scaleX scaleY (spPipe spr)
+      Pipe       -> blank
       PipeR      -> blank
       FlagPole   -> drawFlagPole
       FlagBase   -> drawFlagBase
@@ -381,20 +414,6 @@ drawAxe :: Picture
 drawAxe = pictures
   [ color (makeColorI 139 69 19 255) (translate 0 (-8) (rectangleSolid 6 20))
   , color (makeColorI 255 215 0 255) (translate 0 8 (polygon [(-10,0),(10,0),(0,12)]))
-  ]
-
-drawPipeTop :: Picture
-drawPipeTop = pictures
-  [ color (makeColorI 0 168 0 255) (translate (ts/2) 0 (rectangleSolid (ts*2+4) ts))
-  , color (makeColorI 0 210 0 255) (translate (ts/2) 0 (rectangleSolid (ts*1.6) (ts*0.7)))
-  , color (makeColorI 0 130 0 255) (translate (ts*1.1) 0 (rectangleSolid (ts*0.35) ts))
-  ]
-
-drawPipe :: Picture
-drawPipe = pictures
-  [ color (makeColorI 0 152 0 255) (translate (ts/2) 0 (rectangleSolid (ts*2) ts))
-  , color (makeColorI 0 196 0 255) (translate (ts*0.1) 0 (rectangleSolid (ts*0.45) ts))
-  , color (makeColorI 0 120 0 255) (translate (ts*1.0) 0 (rectangleSolid (ts*0.3) ts))
   ]
 
 drawFlagPole :: Picture
@@ -439,9 +458,9 @@ drawPiranha = pictures
   , color (makeColorI 0 150 0 255)
       (translate 0 (-ts*0.3) (rectangleSolid (ts*0.25) (ts*0.5)))
   , color (makeColorI 0 200 0 255)
-      (translate (-ts*0.3) (-ts*0.1) (ellipseS (ts*0.2) (ts*0.15)))
+      (translate (-ts*0.3) (-ts*0.1) (scale (ts*0.2) (ts*0.15) (circleSolid 1)))
   , color (makeColorI 0 200 0 255)
-      (translate (ts*0.3) (-ts*0.1) (ellipseS (ts*0.2) (ts*0.15)))
+      (translate (ts*0.3) (-ts*0.1) (scale (ts*0.2) (ts*0.15) (circleSolid 1)))
   ]
 
 -- Firebars — no sprite, keep primitive
