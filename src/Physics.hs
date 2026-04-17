@@ -7,8 +7,9 @@ hit :: BB -> BB -> Bool
 hit (ax,ay,aw,ah) (bx,by,bw,bh) =
   abs(ax-bx) < (aw+bw)/2 && abs(ay-by) < (ah+bh)/2
 
+-- Fire Mario is the same physical size as Big Mario (2 tiles tall).
 mBB :: Mario -> BB
-mBB m = (mX m, mY m, ts*0.78, if mState m == Big then ts*2 else ts)
+mBB m = (mX m, mY m, ts*0.78, if mState m == Big || mState m == Fire then ts*2 else ts)
 
 tBB :: Tile -> BB
 tBB t = (fromIntegral (tCol t)*ts + ts/2,
@@ -28,9 +29,8 @@ solid PipeR       = True
 solid FlagBase    = True
 solid Castle      = True
 solid Axe         = False
-solid FirebarTile = False   -- renamed
+solid FirebarTile = False
 solid Step        = True
-solid Hidden = True
 solid _           = False
 
 -- | Sub-stepping physics: number of steps proportional to speed

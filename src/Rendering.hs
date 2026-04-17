@@ -6,9 +6,6 @@ import Constants (ts, sW, sH)
 import Types
 
 -- ─── Sprite record ────────────────────────────────────────────────────────────
--- Only the sprites we actually have PNGs for.
--- Everything else (tiles, coins, decorations, HUD) keeps its existing
--- hand-drawn primitive rendering.
 
 data Sprites = Sprites
   { -- Small Mario
@@ -27,6 +24,15 @@ data Sprites = Sprites
   , spBigJump     :: Picture
   , spBigSkid     :: Picture
   , spBigCrouch   :: Picture
+    -- Fire Mario  (reuses big-mario PNGs with a white palette if no dedicated
+    --              asset exists; loadPNG falls back to a magenta placeholder so
+    --              the game still runs without them)
+  , spFireStand   :: Picture
+  , spFireRun1    :: Picture
+  , spFireRun2    :: Picture
+  , spFireRun3    :: Picture
+  , spFireJump    :: Picture
+  , spFireSkid    :: Picture
     -- Goomba
   , spGoomba1       :: Picture
   , spGoomba2       :: Picture
@@ -45,7 +51,7 @@ data Sprites = Sprites
   , spBlockQuestion2   :: Picture
   , spBlockQuestion3   :: Picture
   , spBlockStep        :: Picture
-    -- Pipe (single sprite, scaled to fit height)
+    -- Pipe
   , spPipe             :: Picture
     -- Decorations
   , spCloudSingle :: Picture
@@ -71,7 +77,7 @@ loadPNG path = do
     Just pic -> return pic
     Nothing  -> do
       putStrLn $ "WARNING: could not load sprite: " ++ path
-      return $ color magenta (rectangleSolid 32 32)  -- hot-pink placeholder
+      return $ color magenta (rectangleSolid 32 32)
 
 loadSprites :: IO Sprites
 loadSprites = Sprites
@@ -91,6 +97,13 @@ loadSprites = Sprites
   <*> loadPNG "assets/mario_big_jump.png"
   <*> loadPNG "assets/mario_big_skid.png"
   <*> loadPNG "assets/mario_big_crouch.png"
+  -- Fire Mario (dedicated assets; falls back gracefully if missing)
+  <*> loadPNG "assets/mario_fire_stand.png"
+  <*> loadPNG "assets/mario_fire_run_1.png"
+  <*> loadPNG "assets/mario_fire_run_2.png"
+  <*> loadPNG "assets/mario_fire_run_3.png"
+  <*> loadPNG "assets/mario_fire_jump.png"
+  <*> loadPNG "assets/mario_fire_skid.png"
   -- Goomba
   <*> loadPNG "assets/goomba_1.png"
   <*> loadPNG "assets/goomba_2.png"
@@ -126,14 +139,10 @@ loadSprites = Sprites
   <*> loadPNG "assets/coin_4.png"
 
 -- ─── World Y offset ──────────────────────────────────────────────────────────
--- Gloss Y=0 is the window centre. We shift the world down so that:
---   • Row 0 top  = -sH/2 + 3*ts = -204  (ground surface, Mario stands here)
---   • Row -2 bottom = -sH/2 = -300       (exactly the window bottom, no gap)
--- Three ground rows (0, -1, -2) fill the bottom 96 units of the window.
 worldYOffset :: Float
 worldYOffset = -(fromIntegral sH / 2) + 3.0 * ts - ts   -- = -236
 
--- ─── Top-level draw (IO because we loaded sprites in IO) ──────────────────────
+-- ─── Top-level draw ───────────────────────────────────────────────────────────
 
 draw :: Sprites -> GS -> IO Picture
 draw spr gs = return $ pictures
@@ -143,18 +152,14 @@ draw spr gs = return $ pictures
   , drawOverlay gs
   ]
   where
-    -- Use mAnim as a global clock for block/coin animation.
-    -- It increments every frame at 60fps so it's a reliable ticker.
     clock = mAnim (gMario gs)
     world = pictures
-      [ drawDecorations spr                                         -- background
-      , drawTilesOfType spr clock isGround   (gTiles gs)           -- ground (covers deco bases)
-      , drawTilesOfType spr clock (not.isGround) (gTiles gs)       -- pipes/blocks on top
+      [ drawDecorations spr
+      , drawTilesOfType spr clock isGround   (gTiles gs)
+      , drawTilesOfType spr clock (not.isGround) (gTiles gs)
       , drawCoins   spr clock (gCoins gs)
       , drawPups    spr       (gPups  gs)
       , drawFirebars          (gFirebars gs)
-      , drawFireballs         (gEnemyFireballs gs)
-      , drawFireballs         (gMarioFireballs gs)
       , drawEnem    spr clock (gEnem  gs)
       , drawMario   spr       (gMario gs)
       ]
@@ -164,22 +169,8 @@ isGround t = tType t == Ground
 
 -- ─── Mario ────────────────────────────────────────────────────────────────────
 
--- PNGs are at NES native resolution (16x16 small, 16x32 big).
--- gloss-juicy loads them at 1 PNG pixel = 1 game unit.
---
--- The correct display scale is game_w / nes_w = 800 / 256 = 3.125.
--- This makes Mario occupy the same fraction of the screen he did on a real
--- NES (16/256 = 6.25% of screen width), regardless of the tile size used
--- for physics. At this scale small Mario = 50x50 units, big = 50x100 units.
--- PNGs are pre-scaled to exactly 3x NES native resolution using integer
--- NEAREST resampling (48x48 small, 48x96 big), so Gloss never has to
--- scale them — no interpolation, no blur, perfectly crisp pixel art.
 marioScale :: Float
 marioScale = 1.0
-
--- mFace is 1 (right) or -1 (left).
--- For death we do NOT flip regardless of facing direction.
--- For everything else, scale x by mFace to mirror the sprite.
 
 drawMario :: Sprites -> Mario -> Picture
 drawMario spr m
@@ -197,36 +188,45 @@ drawMario spr m
 
 pickMarioFrame :: Sprites -> Mario -> Picture
 pickMarioFrame spr m =
-  let big      = mState m == Big
-      airborne = not (mGround m)
-      -- walk cycle: mAnim increments each frame; we bucket into 3 frames
+  let airborne = not (mGround m)
       wFrame   = (floor (mAnim m * 10) :: Int) `mod` 3
-      -- skidding: moving right but VX is negative, or moving left but VX positive
-      skidding = (mFace m == 1 && mVX m < -10)
-              || (mFace m == (-1) && mVX m > 10)
-      -- standing still
+      skidding = (mFace m == 1    && mVX m < -10)
+              || (mFace m == (-1) && mVX m >  10)
       still    = abs (mVX m) < 5 && mGround m
-  in if big
-     then pickBigFrame  spr airborne skidding still wFrame
-     else pickSmallFrame spr airborne skidding still wFrame
+  in case mState m of
+       Big   -> pickBigFrame   spr airborne skidding still wFrame
+       Fire  -> pickFireFrame  spr airborne skidding still wFrame
+       _     -> pickSmallFrame spr airborne skidding still wFrame
 
 pickSmallFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
 pickSmallFrame spr airborne skidding still wFrame
   | airborne  = spMarioJump  spr
   | skidding  = spMarioSkid  spr
   | still     = spMarioStand spr
-  | wFrame == 0 = spMarioRun1  spr
-  | wFrame == 1 = spMarioRun2  spr
-  | otherwise   = spMarioRun3  spr
+  | wFrame == 0 = spMarioRun1 spr
+  | wFrame == 1 = spMarioRun2 spr
+  | otherwise   = spMarioRun3 spr
 
 pickBigFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
 pickBigFrame spr airborne skidding still wFrame
-  | airborne  = spBigJump   spr
-  | skidding  = spBigSkid   spr
-  | still     = spBigStand  spr
-  | wFrame == 0 = spBigRun1  spr
-  | wFrame == 1 = spBigRun2  spr
-  | otherwise   = spBigRun3  spr
+  | airborne  = spBigJump  spr
+  | skidding  = spBigSkid  spr
+  | still     = spBigStand spr
+  | wFrame == 0 = spBigRun1 spr
+  | wFrame == 1 = spBigRun2 spr
+  | otherwise   = spBigRun3 spr
+
+-- | Fire Mario uses the same frame logic as Big Mario but picks the fire
+--   palette sprites.  If those assets are missing the loader already
+--   substituted magenta placeholders, so the game won't crash.
+pickFireFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
+pickFireFrame spr airborne skidding still wFrame
+  | airborne  = spFireJump  spr
+  | skidding  = spFireSkid  spr
+  | still     = spFireStand spr
+  | wFrame == 0 = spFireRun1 spr
+  | wFrame == 1 = spFireRun2 spr
+  | otherwise   = spFireRun3 spr
 
 -- ─── Enemies ──────────────────────────────────────────────────────────────────
 
@@ -243,9 +243,6 @@ drawE spr clock e = case eState e of
       else blank
   where
     cx = eX e + ts/2
-    -- Enemy sprites are 48px tall (16 NES px * 3). Half = 24.
-    -- Centering at eY+24 puts the sprite bottom exactly at eY,
-    -- which is the physics floor — no clipping into the ground.
     spriteHalf = 24
 
     shellPic moving
@@ -262,39 +259,50 @@ drawEnemyBody spr clock e = case eType e of
   Goomba  -> scale marioScale marioScale $ goombaFrame spr clock
   Koopa   -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr clock e
   Piranha -> translate 0 (ts * 0.6) drawPiranha
-  Bowser -> scale marioScale marioScale (drawBowser spr clock e)
+  Bowser  -> drawBowser e
 
--- Koopa sprite faces right by default. Flip when moving left (eVX < 0).
+-- | Bowser: a large dark turtle-dragon primitive.
+--   Two tiles wide and slightly taller than a Koopa.
+drawBowser :: Enemy -> Picture
+drawBowser _ = pictures
+  [ -- Shell / body
+    color (makeColorI 34 139 34 255) (rectangleSolid (ts*2) (ts*1.6))
+    -- Belly
+  , color (makeColorI 222 184 135 255) (translate 0 (-ts*0.1) (rectangleSolid (ts*1.2) (ts*0.9)))
+    -- Head
+  , color (makeColorI 34 139 34 255) (translate (ts*0.6) (ts*0.9) (rectangleSolid (ts*0.9) (ts*0.7)))
+    -- Eye
+  , color white (translate (ts*0.75) (ts*1.05) (circleSolid (ts*0.18)))
+  , color black (translate (ts*0.82) (ts*1.05) (circleSolid (ts*0.09)))
+    -- Horns
+  , color (makeColorI 255 200 0 255) (translate (ts*0.3)  (ts*1.4) (rectangleSolid (ts*0.18) (ts*0.4)))
+  , color (makeColorI 255 200 0 255) (translate (ts*0.85) (ts*1.4) (rectangleSolid (ts*0.18) (ts*0.4)))
+    -- Spiked shell
+  , color (makeColorI 100 200 100 255) (translate 0 (ts*0.15) (rectangleSolid (ts*1.9) (ts*1.1)))
+  , color (makeColorI 255 200 0 255) (translate (-ts*0.5) (ts*0.5) (circleSolid (ts*0.22)))
+  , color (makeColorI 255 200 0 255) (translate 0         (ts*0.6) (circleSolid (ts*0.22)))
+  , color (makeColorI 255 200 0 255) (translate ( ts*0.5) (ts*0.5) (circleSolid (ts*0.22)))
+  ]
+
 koopaFace :: Enemy -> Float
 koopaFace e = if eVX e >= 0 then 1 else -1
 
--- Goomba walks with 2 frames, alternating at ~8fps using the global clock.
--- NES Goomba animates at roughly 8 frames/sec.
 goombaFrame :: Sprites -> Float -> Picture
 goombaFrame spr clock =
   if even (floor (clock * 8) :: Int)
     then spGoomba1 spr
     else spGoomba2 spr
 
--- Koopa walks with 2 frames at the same rate.
--- When in shell state the shell sprite is shown regardless of clock.
 koopaFrame :: Sprites -> Float -> Enemy -> Picture
 koopaFrame spr clock e = case eState e of
   EShell _ _ -> spKoopaShell spr
-  _          ->
+  _ ->
     if even (floor (clock * 8) :: Int)
       then spKoopa1 spr
       else spKoopa2 spr
 
-drawBowser :: Sprites -> Float -> Enemy -> Picture
-drawBowser spr clock e = pictures
-  [ color (makeColorI 200 100 0 255) (rectangleSolid (ts*1.5) (ts*1.5))
-  , color (makeColorI 255 200 0 255) (translate 0 (ts*0.4) (circleSolid (ts*0.5)))
-  ]     
+-- ─── Primitives ───────────────────────────────────────────────────────────────
 
--- ─── Primitives kept from original (no sprites available yet) ─────────────────
-
--- Sky
 drawSky :: Picture
 drawSky = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
 
@@ -302,11 +310,7 @@ skyBlue :: Color
 skyBlue = makeColorI 97 133 248 255
 
 -- ─── Decorations ─────────────────────────────────────────────────────────────
--- All decoration sprites are pre-scaled (3x NES native).
--- We render them at 1:1 (no further scaling) since their pixel size already
--- matches the world coordinate scale.
 
--- Cloud positions: (col, y-row, size) where size 1=single, 2=double
 cloudPositions :: [(Float, Float, Int)]
 cloudPositions =
   [ (6,10,1), (24,10,2), (44,10,1), (64,10,2)
@@ -314,13 +318,11 @@ cloudPositions =
   , (154,10,2), (172,10,1), (192,10,1)
   ]
 
--- Hill positions: (col, _). Alternate small/large by index.
 hillPositions :: [(Int, Float, Float)]
 hillPositions = zip3 [0..]
   [0, 16, 48, 80, 96, 128, 160, 192]
   (repeat 1)
 
--- Bush positions: (col, _). Alternate single/triple by index.
 bushPositions :: [(Int, Float, Float)]
 bushPositions = zip3 [0..]
   [11, 23, 35, 57, 73, 89, 105, 121, 145, 170, 185]
@@ -343,9 +345,6 @@ drawHill :: Sprites -> (Int, Float, Float) -> Picture
 drawHill spr (idx, c, _) =
   let x   = c * ts + ts
       pic = if even idx then spHillSmall spr else spHillLarge spr
-      -- Lower by ts/2 so the base overlaps ground tiles (matches NES look).
-      -- hill_small ≈ 96px tall → half = 48. Center = ts + 48 - ts/2 = 64.
-      -- hill_large ≈ 144px tall → half = 72. Center = ts + 72 - ts/2 = 88.
       y   = if even idx then ts + 32 else ts + 56
   in translate x y pic
 
@@ -353,16 +352,11 @@ drawBush :: Sprites -> (Int, Float, Float) -> Picture
 drawBush spr (idx, c, _) =
   let x   = c * ts
       pic = if even idx then spBushSingle spr else spBushTriple spr
-      -- bush ≈ 48px tall → half = 24. Center = ts + 24 - ts/2 = 40.
       y   = ts + 8
   in translate x y pic
 
 -- ─── Tiles ────────────────────────────────────────────────────────────────────
 
--- Block sprites are 48x48 px (16 NES px * 3).
--- The physics grid cell is ts=32 game units.
--- Tiles must render at exactly 32x32 to avoid clipping neighbours.
--- Scale factor: ts / 48 = 32 / 48 = 0.6667
 tileScale :: Float
 tileScale = ts / 48
 
@@ -385,13 +379,6 @@ drawTile spr clock t = translate tx ty pic
       QBlock     -> scale tileScale tileScale (qBlockFrame spr clock)
       Used       -> scale tileScale tileScale (spBlockHitEmpty spr)
       Step       -> scale tileScale tileScale (spBlockStep spr)
-      -- Pipes: pipe.png (48x96) rendered ONCE at PipeTop, covering the full pipe.
-      -- Pipe spans world y = ts (ground surface) to (h+1)*ts (top of PipeTop tile).
-      -- Pipe height = h*ts. Center y = ts + h*ts/2.
-      -- drawTile already translates to ty = h*ts + ts/2 (PipeTop tile centre).
-      -- offsetY = desired_centre - tile_centre = (ts + h*ts/2) - (h*ts + ts/2) = ts*(1-h)/2
-      -- scaleX = 2*ts/48  (two tiles wide)
-      -- scaleY = h*ts/96  (stretches to full pipe height)
       PipeTop    ->
         let h       = fromIntegral (tRow t) :: Float
             scaleX  = 2 * ts / 48
@@ -408,13 +395,11 @@ drawTile spr clock t = translate tx ty pic
       Axe        -> drawAxe
       _          -> blank
 
--- ? block cycles through 3 frames. The "shine" frame (3) shows briefly.
--- Full cycle: 1,1,1,1,2,2,2,2,3,3,1,1... — frame 3 is the quick flash.
 qBlockFrame :: Sprites -> Float -> Picture
 qBlockFrame spr clock =
   let frame = (floor (clock * 4) :: Int) `mod` 10
   in case frame of
-       8 -> spBlockQuestion3 spr   -- flash frame (brief shine)
+       8 -> spBlockQuestion3 spr
        9 -> spBlockQuestion3 spr
        f | f < 5 -> spBlockQuestion1 spr
        _          -> spBlockQuestion2 spr
@@ -446,8 +431,8 @@ drawCastle t =
      else pictures
        [ color (makeColorI 160 72 32 255) (rectangleSolid ts ts)
        , color (makeColorI 130 52 16 255) $ pictures
-           [ translate 0       (ts*0.25) (rectangleSolid ts 2)
-           , translate (ts*0.3) 0        (rectangleSolid 2 ts)
+           [ translate 0        (ts*0.25) (rectangleSolid ts 2)
+           , translate (ts*0.3) 0         (rectangleSolid 2 ts)
            ]
        , if isBattlement
            then color (makeColorI 100 36 8 255)
@@ -455,7 +440,6 @@ drawCastle t =
            else blank
        ]
 
--- Piranha — no sprite, keep primitive
 drawPiranha :: Picture
 drawPiranha = pictures
   [ color (makeColorI 0 180 0 255)   (circleSolid (ts*0.45))
@@ -472,53 +456,72 @@ drawPiranha = pictures
       (translate (ts*0.3) (-ts*0.1) (scale (ts*0.2) (ts*0.15) (circleSolid 1)))
   ]
 
--- Firebars — no sprite, keep primitive (for now)
-drawFireballs :: [Fireball] -> Picture
-drawFireballs = pictures . map drawFireball'
-
-drawFireball' :: Fireball -> Picture
-drawFireball' fb
-  | not (fbAlive fb) = blank
-  | otherwise = translate (fbx fb) (fby fb) $
-      color (makeColorI 255 100 0 255) (circleSolid (ts*0.4))
-
 drawFirebars :: [Firebar] -> Picture
 drawFirebars = pictures . map drawFirebar
+
+drawFirebar :: Firebar -> Picture
+drawFirebar fb = pictures
+  [ drawFireball (fbX fb + dx) (fbY fb + dy)
+  | i <- [0..fbLength fb - 1]
+  , let spacing = ts * 0.8
+        angle   = fbAngle fb
+        dx = spacing * fromIntegral i * cos angle
+        dy = spacing * fromIntegral i * sin angle
+  ]
 
 drawFireball :: Float -> Float -> Picture
 drawFireball x y =
   translate x y $ color (makeColorI 255 100 0 255) (circleSolid (ts*0.3))
 
-drawFirebar :: Firebar -> Picture
-drawFirebar fb = pictures
-  [ drawFireball' (Fireball (fbX fb + dx) (fbY fb + dy) 0 0 True)
-  | i <- [0..fbLength fb - 1]
-  , let spacing = ts * 0.8
-        angle = fbAngle fb
-        dx = spacing * fromIntegral i * cos angle
-        dy = spacing * fromIntegral i * sin angle
-  ] 
+-- ─── Power-ups ────────────────────────────────────────────────────────────────
 
--- Power-ups — now sprite-based
 drawPups :: Sprites -> [PUp] -> Picture
 drawPups spr = pictures . map (drawPup spr)
 
 drawPup :: Sprites -> PUp -> Picture
 drawPup spr p
   | not (pAlive p) = blank
-  | otherwise      = translate (pX p + ts/2) (pY p)
-                       (spMushroom spr)
+  | otherwise      = translate (pX p + ts/2) (pY p) pic
+  where
+    pic = case pType p of
+            Mushroom   -> spMushroom spr
+            FireFlower -> drawFireFlower
+            Star       -> spMushroom spr   -- placeholder until star sprite added
 
--- Coins — now sprite-based with 4-frame rotation animation
+-- | Fire Flower primitive: orange petals + green stem, no external asset needed.
+drawFireFlower :: Picture
+drawFireFlower = pictures
+  [ -- Stem
+    color (makeColorI 0 180 0 255)
+      (translate 0 (-ts*0.25) (rectangleSolid (ts*0.12) (ts*0.5)))
+    -- Leaves
+  , color (makeColorI 0 200 0 255)
+      (translate (-ts*0.2) (-ts*0.1) (scale (ts*0.25) (ts*0.15) (circleSolid 1)))
+  , color (makeColorI 0 200 0 255)
+      (translate ( ts*0.2) (-ts*0.1) (scale (ts*0.25) (ts*0.15) (circleSolid 1)))
+    -- Red centre petal ring
+  , color (makeColorI 220 50 0 255) (circleSolid (ts*0.3))
+    -- Orange outer petals (4 directions)
+  , color (makeColorI 255 140 0 255)
+      (translate 0 (ts*0.28) (circleSolid (ts*0.18)))
+  , color (makeColorI 255 140 0 255)
+      (translate 0 (-ts*0.28) (circleSolid (ts*0.18)))
+  , color (makeColorI 255 140 0 255)
+      (translate (ts*0.28) 0 (circleSolid (ts*0.18)))
+  , color (makeColorI 255 140 0 255)
+      (translate (-ts*0.28) 0 (circleSolid (ts*0.18)))
+    -- White dot centre
+  , color white (circleSolid (ts*0.12))
+  ]
+
+-- Coins
 drawCoins :: Sprites -> Float -> [(Float,Float,Bool)] -> Picture
 drawCoins spr clock = pictures . map (drawCoin spr clock)
 
 drawCoin :: Sprites -> Float -> (Float,Float,Bool) -> Picture
 drawCoin _   _     (_,_,True) = blank
-drawCoin spr clock (x,y,_)   =
-  translate x y (coinFrame spr clock)
+drawCoin spr clock (x,y,_)   = translate x y (coinFrame spr clock)
 
--- Coin rotates through 4 frames. Each frame holds for ~8 ticks.
 coinFrame :: Sprites -> Float -> Picture
 coinFrame spr clock =
   let frame = (floor (clock * 8) :: Int) `mod` 4
@@ -528,65 +531,60 @@ coinFrame spr clock =
        2 -> spCoin3 spr
        _ -> spCoin4 spr
 
--- ─── HUD & Overlay (unchanged) ────────────────────────────────────────────────
-
 -- ─── HUD ─────────────────────────────────────────────────────────────────────
--- Five evenly-spaced columns across the top of the 800px window,
--- matching the NES layout: SCORE | COINS | WORLD | TIME | LIVES
--- Each column has a white label on top and a white value below.
--- All positions are in screen coords (not affected by worldYOffset).
 
 hudLabelY :: Float
-hudLabelY = 265   -- near window top (+300)
+hudLabelY = 265
 
 hudValueY :: Float
-hudValueY = 243   -- 22px below label
+hudValueY = 243
 
 hudScale :: Float
 hudScale = 0.16
 
--- Column centre x positions (evenly split across 800px, -400 to +400)
 hudCol :: Int -> Float
-hudCol i = -320 + fromIntegral i * 160   -- cols at -320,-160,0,+160,+320
+hudCol i = -320 + fromIntegral i * 160
 
 hudLabel :: String -> Float -> Picture
 hudLabel s x = translate (x - labelOffset s) hudLabelY
              $ color white
              $ scale hudScale hudScale (text s)
   where
-    -- approximate half-width of string to centre it
     labelOffset str = fromIntegral (length str) * hudScale * 52 / 2
 
-hudValue :: String -> Float -> Picture
-hudValue s x = translate (x - labelOffset s) hudValueY
-             $ color white
-             $ scale hudScale hudScale (text s)
+hudValue :: Color -> String -> Float -> Picture
+hudValue c s x = translate (x - labelOffset s) hudValueY
+               $ color c
+               $ scale hudScale hudScale (text s)
   where
     labelOffset str = fromIntegral (length str) * hudScale * 52 / 2
+
+-- | Zero-pad an integer to a minimum number of digits.
+zeroPad :: Int -> Int -> String
+zeroPad digits n = let s = show n
+                       pad = replicate (max 0 (digits - length s)) '0'
+                   in pad ++ s
 
 drawHUD :: GS -> Picture
 drawHUD gs =
   let currentLevel = gLevels gs !! gLevelIdx gs
-      worldNum = lWorld currentLevel
-      lvlNum   = lNumber currentLevel
-      -- Gloss `text` char width ≈ 104 units at scale 1.0.
-      -- We use a helper that centres each string over its column.
+      worldNum  = lWorld currentLevel
+      lvlNum    = lNumber currentLevel
+      timerVal  = floor (gTimer gs) :: Int
+      -- Timer turns red when below 100 (NES urgency cue)
+      timerColor = if timerVal < 100 then red else white
   in pictures
-       [ hudLabel "SCORE" (hudCol 0)
-       , hudLabel "COINS" (hudCol 1)
-       , hudLabel "WORLD" (hudCol 2)
-       , hudLabel "TIME"  (hudCol 3)
-       , hudLabel "LIVES" (hudCol 4)
-       , hudValue (show (gScore gs))                       (hudCol 0)
-       , hudValue (show (gCoins' gs))                      (hudCol 1)
-       , hudValue (show worldNum ++ "-" ++ show lvlNum)    (hudCol 2)
-       , hudValue (show (floor (gTimer gs) :: Int))                (hudCol 3)
-       , hudValue (show (gLives gs))                       (hudCol 4)
+       [ hudLabel "MARIO"  (hudCol 0)
+       , hudLabel "COINS"  (hudCol 1)
+       , hudLabel "WORLD"  (hudCol 2)
+       , hudLabel "TIME"   (hudCol 3)
+       , hudLabel "LIVES"  (hudCol 4)
+       , hudValue white  (zeroPad 6 (gScore gs))                   (hudCol 0)
+       , hudValue white  ("\xd7" ++ zeroPad 2 (gCoinCount gs))     (hudCol 1)
+       , hudValue white  (show worldNum ++ "-" ++ show lvlNum)     (hudCol 2)
+       , hudValue timerColor (zeroPad 3 timerVal)                  (hudCol 3)
+       , hudValue white  (zeroPad 2 (gLives gs))                   (hudCol 4)
        ]
-
--- Count collected coins from the coin list (True = collected)
-gCoins' :: GS -> Int
-gCoins' gs = length (filter (\(_,_,c) -> c) (gCoins gs))
 
 drawOverlay :: GS -> Picture
 drawOverlay gs = case gPhase gs of

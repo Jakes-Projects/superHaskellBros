@@ -70,14 +70,14 @@ mkCoins ps =
 
 mkLevel
   :: [Tile] -> [Enemy] -> [(Float,Float,Bool)] -> [PUp] -> [Firebar]
-  -> Float -> Float -> Float -> Int -> Int -> [((Int,Int), WarpDest)] -> Level
-mkLevel ts_ es cs ps fs sx sy ex w n wm = Level ts_ es cs ps fs sx sy ex w n wm
+  -> Float -> Float -> Float -> Int -> Int -> Level
+mkLevel ts_ es cs ps fs sx sy ex w n = Level ts_ es cs ps fs sx sy ex w n
 
 initMarioFromLevel :: Level -> Mario
 initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0
 
 --------------------------------------------------------------------------------
--- Enemies
+-- Enemy helpers
 --------------------------------------------------------------------------------
 
 mkG :: Int -> Enemy
@@ -95,78 +95,85 @@ mkKAt c r = Enemy (fromIntegral c * ts) (fromIntegral r * ts) (-70) 0 EAlive Koo
 mkP :: (Int, Int) -> Enemy
 mkP (c, r) = Enemy (fromIntegral c * ts) (fromIntegral r * ts) 0 0 (EPiranha 0 False) Piranha
 
+-- | Bowser: 2-tile-wide, spawns at column c, paces left at -60 px/s
+mkBowser :: Int -> Enemy
+mkBowser c = Enemy (fromIntegral c * ts) ts (-60) 0 EAlive Bowser
+
 --------------------------------------------------------------------------------
 -- World 1-1
+-- Reference: https://www.mariowiki.com/World_1-1
 --------------------------------------------------------------------------------
 
 level1_1 :: Level
-level1_1 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*1.5) (204*ts) 1 1 []
+level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 1 1
   where
     ground = mkGround 0 211
 
     blocks =
-         mkQLine 3 16 16                     -- mushroom block
-      ++ mkPlatform 3 20 20
-      ++ mkQLine 3 21 21                     -- coin
+      -- First brick cluster (cols 20–24, row 3):  B ? B ? B
+      -- Original layout: col20=Brick, 21=QBlock, 22=Brick, 23=QBlock, 24=Brick
+         mkPlatform 3 20 20
+      ++ mkQLine    3 21 21
       ++ mkPlatform 3 22 22
-      ++ mkQLine 3 23 23                     -- coin
+      ++ mkQLine    3 23 23
       ++ mkPlatform 3 24 24
-      ++ [Tile 22 7 Hidden]                  -- hidden 1-Up (invisible)
+      -- Hidden single QBlock above the gap, col 22, row 7
+      ++ mkQLine    7 22 22
+
+      -- Second brick cluster (cols 78–82, row 3): B ? B B B
+      -- Row-7 QBlocks: 78, 79, 80
       ++ mkPlatform 3 78 78
-      ++ mkQLine 3 79 79                     -- coin
-      ++ mkPlatform 3 80 81
-      ++ mkQLine 3 82 82                     -- coin
-      ++ mkPlatform 3 83 83
-      ++ mkQLine 7 78 80                     -- star in middle ? block
-      ++ mkPlatform 7 81 81
+      ++ mkQLine    3 79 79
+      ++ mkPlatform 3 80 82
+      ++ mkQLine    7 78 80
+
+      -- Third cluster (cols 91–95, row 3): B B ? B B
       ++ mkPlatform 3 91 92
-      ++ mkQLine 3 93 93                     -- coin
+      ++ mkQLine    3 93 93
       ++ mkPlatform 3 94 95
+
+      -- Fourth cluster (cols 100–102, row 3): B ? B
       ++ mkPlatform 3 100 100
-      ++ mkQLine 3 101 101                   -- coin
+      ++ mkQLine    3 101 101
       ++ mkPlatform 3 102 102
+
+      -- Fifth cluster (cols 107–110, row 3 & 7):  B B B / B ? B B
       ++ mkPlatform 3 107 109
       ++ mkPlatform 7 107 107
-      ++ mkQLine 7 108 108                   -- high ? block (coin)
+      ++ mkQLine    7 108 108
       ++ mkPlatform 7 109 110
 
-    pipes = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(163,2)]
-    stairs = mkStairsUp 127 4 ++ mkStairsDown 133 4 ++ mkStairsUp 140 4 ++ mkStairsDown 146 4
+    pipes  = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(163,2)]
+    stairs = mkStairsUp 127 4 ++ mkStairsDown 133 4
+          ++ mkStairsUp 140 4 ++ mkStairsDown 146 4
     finish = mkStairsUp 196 8
-    flag = mkFlag 204
+    flag   = mkFlag 204
     castle = mkCastle 207
 
     tiles = ground ++ blocks ++ pipes ++ stairs ++ finish ++ flag ++ castle
 
-    -- Power-ups placed directly (hidden 1‑Up and star)
-    pups = [ PUp (22*ts) (8*ts + ts*0.5) 120 True OneUp
-           , PUp (79*ts) (8*ts + ts*0.5) 120 True Starman
-           ]
-
     enemies =
-         map mkG [20,22,37,40,57,59,80,82,100,102,110,116,150,152]
+         map mkG [22,37,40,57,59,80,82,100,102,110,116,150,152]
       ++ map mkK [60,92,130]
       ++ map mkP [(28,1),(38,2),(46,3),(57,3),(163,1)]
 
-    coins = mkCoins
-      ([(c,2) | c <- [1..4]] ++ [(21,5),(23,5),(79,5),(82,5),(93,5),(101,5),(108,9)])
-
-    firebars = []
+    -- Coins in the original 1-1 sit *only* inside the ? blocks (col 21, 23,
+    -- 79, 82, 93, 101, 108).  They are NOT pre-placed floating in the air;
+    -- they fly out when Mario bumps the block.  The only visible coins at
+    -- game start are those inside the row-7 hidden blocks.  We keep a small
+    -- selection of non-? coins that are genuinely floating in the overworld
+    -- (none in the vanilla 1-1, so we leave the coin list empty here and let
+    -- bumpBlocks handle the ? block coins).
+    coins = mkCoins []
 
 --------------------------------------------------------------------------------
 -- World 1-2
 --------------------------------------------------------------------------------
 
-warpMap1_2 :: [((Int,Int), WarpDest)]
-warpMap1_2 = [ ((68,2), (1,2, 100*ts, 3*ts))   -- bonus coin room (same level)
-             , ((72,3), (2,1, 3*ts, 3*ts))     -- warp to World 2-1
-             , ((76,4), (3,1, 3*ts, 3*ts))     -- warp to World 3-1
-             ]
-
 level1_2 :: Level
-level1_2 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*3) (208*ts) 1 2 warpMap1_2
+level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*3) (208*ts) 1 2
   where
-    ground = mkGround 0 208
+    ground  = mkGround 0 208
     ceiling = mkCeiling 12 0 208
 
     bricks =
@@ -174,17 +181,17 @@ level1_2 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*3) (208*ts) 1 2 
       ++ mkPlatform 4 7 10
       ++ mkPlatform 8 2 5
       ++ mkPlatform 8 7 10
-      ++ mkQLine 4 16 16
+      ++ mkQLine    4 16 16
       ++ mkPlatform 4 17 19
-      ++ mkQLine 4 21 21
+      ++ mkQLine    4 21 21
       ++ mkPlatform 4 22 24
       ++ mkPlatform 7 32 34
-      ++ mkQLine 4 48 49
+      ++ mkQLine    4 48 49
       ++ mkPlatform 8 48 49
       ++ mkPlatform 7 64 66
-      ++ mkQLine 10 72 72      -- warp zone coin blocks
-      ++ mkQLine 10 74 74
-      ++ mkQLine 10 76 76
+      ++ mkQLine   10 72 72
+      ++ mkQLine   10 74 74
+      ++ mkQLine   10 76 76
       ++ mkPlatform 4 96 97
       ++ mkPlatform 8 96 97
       ++ mkPlatform 4 112 113
@@ -200,13 +207,11 @@ level1_2 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*3) (208*ts) 1 2 
       ++ mkPlatform 4 192 193
       ++ mkPlatform 8 192 193
 
-    pipes = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(100,2),(108,3)]
-    warp  = mkPipeGroup [(68,2),(72,3),(76,4)]   -- warp pipes
-    exitPipe = mkPipe 203 2 ++ [Tile 203 3 Brick, Tile 204 3 Brick]
+    pipes    = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(100,2),(108,3)]
+    warp     = mkPipeGroup [(68,2),(72,3),(76,4)]
+    exitPipe = mkPipe 203 2 ++ [Tile 203 3 Step, Tile 204 3 Step]
 
     tiles = ground ++ ceiling ++ bricks ++ pipes ++ warp ++ exitPipe
-
-    pups = []   -- no placed power-ups
 
     enemies =
          map mkG [16,18,36,38,52,54,80,82,100,102,120,122,144,146,160,162,180,182]
@@ -214,23 +219,23 @@ level1_2 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*3) (208*ts) 1 2 
       ++ map mkP [(28,1),(38,2),(46,3),(57,3),(100,1),(108,2)]
 
     coins = mkCoins
-      ([(c,2) | c <- [1..5]] ++ [(16,6),(17,6),(21,6),(22,6)] ++ [(48,6),(49,6)]
+      ([(16,6),(17,6),(21,6),(22,6)] ++ [(48,6),(49,6)]
        ++ [(96,9),(97,9)] ++ [(144,9),(145,9)] ++ [(176,6),(177,6)])
-
-    firebars = []
 
 --------------------------------------------------------------------------------
 -- World 1-3
+-- Treetop level: Mario walks across stacked brick platforms (tree canopy).
 --------------------------------------------------------------------------------
+
 level1_3 :: Level
-level1_3 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*5) (244*ts) 1 3 []
+level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (244*ts) 1 3
   where
     ground = mkGround 0 244
 
     islands =
          mkPlatform 3 10 12 ++ mkPlatform 4 10 12
       ++ mkPlatform 3 16 19 ++ mkPlatform 4 16 19
-      ++ mkPlatform 5 26 29 ++ mkPlatform 6 26 29   -- raised platforms
+      ++ mkPlatform 5 26 29 ++ mkPlatform 5 30 31
       ++ mkPlatform 4 34 36 ++ mkPlatform 5 34 36
       ++ mkPlatform 3 48 50 ++ mkPlatform 4 48 50
       ++ mkPlatform 4 58 60 ++ mkPlatform 5 58 60
@@ -255,16 +260,9 @@ level1_3 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*5) (244*ts) 1 3 
       ++ mkQLine 6 176 176
       ++ mkQLine 4 208 209
 
-    flag = mkFlag 240
-    castle = mkCastle 243
-
-    tiles = ground ++ islands ++ jumps ++ flag ++ castle
-
-    pups = []
-    firebars = []
+    tiles = ground ++ islands ++ jumps
 
     enemies = map mkG [16,18,50,82,114,146,178,210] ++ map mkK [64,128,192]
-
     coins = mkCoins
       ([(c,4) | c <- [26..29]] ++ [(c,5) | c <- [90..93]] ++ [(c,4) | c <- [122..125]]
        ++ [(c,5) | c <- [154..157]] ++ [(c,4) | c <- [186..189]] ++ [(c,4) | c <- [218..221]]
@@ -272,51 +270,58 @@ level1_3 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*5) (244*ts) 1 3 
 
 --------------------------------------------------------------------------------
 -- World 1-4
+-- Bowser's castle.  Firebars, lava pits, and Bowser on the bridge.
+-- Bowser is defeated only by touching the Axe at col 77 (already handled by
+-- the Axe tile logic in GameState).
 --------------------------------------------------------------------------------
 
 level1_4 :: Level
-level1_4 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*3) (80*ts) 1 4 []
+level1_4 = mkLevel tiles enemies coins [] firebars (ts*3) (ts*3) (80*ts) 1 4
   where
     floorA = mkGround 0 15
     floorB = mkGround 20 25
     floorC = mkGround 30 49
     lava   = [Tile c (-2) Ground | c <- [16..19] ++ [26..29]]
 
-    walls  = mkRect Brick 0 50 2 10
-          ++ [Tile 0 r Brick | r <- [0..10]]
-          ++ [Tile 50 r Brick | r <- [0..10]]
+    walls  = mkRect Step 0 50 2 10
+          ++ [Tile 0 r Step | r <- [0..10]]
+          ++ [Tile 50 r Step | r <- [0..10]]
 
-    bridge = mkBridge 16 39
+    -- First bridge (over first lava pit and through the main castle hall)
+    bridge        = mkBridge 16 39
     bridgeSupport = mkBridgePosts [16,19,22,25,28,31,34,37]
 
-    secondRun = mkBridge 40 73
+    -- Second bridge leads to Bowser
+    secondRun     = mkBridge 40 73
     secondSupport = mkBridgePosts [40,45,50,55,60,65,70,73]
 
     stairClimb = mkStairsUp 73 6
-    axe = [Tile 77 1 Axe]
-    castle = mkCastle 78
+    axe        = [Tile 77 1 Axe]
+    castle     = mkCastle 78
 
     tiles = floorA ++ floorB ++ floorC ++ lava ++ walls
          ++ bridge ++ bridgeSupport
          ++ secondRun ++ secondSupport
          ++ stairClimb ++ axe ++ castle
 
+    -- Two firebars: one in the first corridor, one in the castle hall
     firebars =
-      [ Firebar (34*ts) (3*ts) 0.0 2.4 4
-      , Firebar (58*ts) (3*ts) 1.3 2.0 5
+      [ Firebar (34*ts) (3*ts) 0.00 2.4 4
+      , Firebar (58*ts) (3*ts) 1.30 2.0 5
       ]
 
-    pups = []
     enemies =
-      [ Enemy (25*ts) (ts*2) 0 0 (EBowser 1.5 (-1)) Bowser
-      , Enemy (20*ts) (ts*2) (-80) 0 EAlive Goomba
-      , Enemy (30*ts) (ts*2) (-80) 0 EAlive Goomba
+      [ Enemy (10*ts) ts (-80) 0 EAlive Goomba
+      , Enemy (12*ts) ts (-80) 0 EAlive Goomba
+      , Enemy (25*ts) (ts*2) (-70) 0 EAlive Koopa
+      , mkBowser 65   -- Bowser guards the second bridge
       ]
 
+    -- A handful of coins in the first corridor to reward careful play
     coins = mkCoins [(5,2),(6,2),(7,2),(8,2),(9,2),(10,2),(20,2),(25,2),(30,2),(35,2)]
 
 --------------------------------------------------------------------------------
--- All levels
+-- All levels exported
 --------------------------------------------------------------------------------
 
 allLevels :: [Level]

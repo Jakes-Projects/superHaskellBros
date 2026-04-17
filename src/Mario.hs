@@ -22,9 +22,22 @@ tryJump m
   | mGround m && mState m /= MDead = m { mVY = jumpV, mGround = False }
   | otherwise = m
 
-deathCheck :: Mario -> Int -> (Mario, Phase)
-deathCheck m lv
-  | mY m < -300 = (initMarioPlaceholder, if lv <= 1 then Over else Play)
+-- | Check whether Mario has fallen off the screen.
+--   sx/sy are the level's starting position, used to re-spawn after losing a life.
+--   Returns one phase step:
+--     • 'Over' when lives run out
+--     • 'Play' when a life is lost but lives remain (caller decrements the counter)
+deathCheck :: Mario -> Int -> Float -> Float -> (Mario, Phase)
+deathCheck m lv sx sy
+  | mY m < -300 = (resetMario, if lv <= 1 then Over else Play)
   | otherwise   = (m, Play)
   where
-    initMarioPlaceholder = m { mX = 96, mY = 48, mVX = 0, mVY = 0, mState = Small, mFace = 1, mInv = 0 }
+    resetMario = m { mX     = sx
+                   , mY     = sy
+                   , mVX    = 0
+                   , mVY    = 0
+                   , mState = Small
+                   , mFace  = 1
+                   , mInv   = 0
+                   , mGround = False
+                   }
