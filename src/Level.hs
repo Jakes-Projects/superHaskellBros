@@ -95,9 +95,10 @@ mkKAt c r = Enemy (fromIntegral c * ts) (fromIntegral r * ts) (-70) 0 EAlive Koo
 mkP :: (Int, Int) -> Enemy
 mkP (c, r) = Enemy (fromIntegral c * ts) (fromIntegral r * ts) 0 0 (EPiranha 0 False) Piranha
 
--- | Bowser: 2-tile-wide, spawns at column c, paces left at -60 px/s
+-- | Bowser: 2-tile-wide, spawns at column c.
+--   y = ts*2 places him on top of the row-1 bridge tiles (bridge top = 2*ts).
 mkBowser :: Int -> Enemy
-mkBowser c = Enemy (fromIntegral c * ts) ts (-60) 0 EAlive Bowser
+mkBowser c = Enemy (fromIntegral c * ts) (ts*2) (-60) 0 EAlive Bowser
 
 --------------------------------------------------------------------------------
 -- World 1-1
@@ -153,8 +154,11 @@ level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 1 1
     tiles = ground ++ blocks ++ pipes ++ stairs ++ finish ++ flag ++ castle
 
     enemies =
-         map mkG [22,37,40,57,59,80,82,100,102,110,116,150,152]
-      ++ map mkK [60,92,130]
+      -- col 55 instead of 57: pipe (57,4) occupies cols 57-58
+      -- col 132 instead of 130: stairsUp 127 fills col 130 rows 1-4;
+      --   cols 131-132 are the clear gap between the two staircase pairs
+         map mkG [22,37,40,55,59,80,82,100,102,110,116,150,152]
+      ++ map mkK [60,92,132]
       ++ map mkP [(28,1),(38,2),(46,3),(57,3),(163,1)]
 
     -- Coins in the original 1-1 sit *only* inside the ? blocks (col 21, 23,
@@ -214,7 +218,9 @@ level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*3) (208*ts) 1 2
     tiles = ground ++ ceiling ++ bricks ++ pipes ++ warp ++ exitPipe
 
     enemies =
-         map mkG [16,18,36,38,52,54,80,82,100,102,120,122,144,146,160,162,180,182]
+      -- col 40 instead of 38: pipe (38,3) occupies cols 38-39
+      -- col 98 instead of 100: pipe (100,2) occupies cols 100-101
+         map mkG [16,18,36,40,52,54,80,82,98,102,120,122,144,146,160,162,180,182]
       ++ map mkK [64,96,128]
       ++ map mkP [(28,1),(38,2),(46,3),(57,3),(100,1),(108,2)]
 
