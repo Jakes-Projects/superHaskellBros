@@ -172,61 +172,129 @@ level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 1 1
 
 --------------------------------------------------------------------------------
 -- World 1-2
+-- Image-accurate layout:
+--   Above ground  : raised platform (cols 0–17) with Step battlements and
+--                   one entry pipe at col 13 (height 2, no Piranha).
+--   Underground   : cave ceiling row 11, cols 18–194.
+--     Early cave  : "? □ □ □ □" brick row at row 2 (cols 32–36).
+--                   Stair A: ascending brick columns heights 1–4 (cols 41–44).
+--                   Stair B: same pattern (cols 49–52).
+--                   Lone brick col 57.
+--     Mid-cave    : 4 coins (row 6) + ? block (row 5, col 73) + 4 coins (row 5).
+--     Arch structs: two hollow bracket structures.
+--                   Each has a wide top shelf (row 8) with thick legs (rows 5–7)
+--                   at each end, leaving an open hollow interior with coins.
+--     Right cave  : 6 coins in a row (row 6). Two Piranha pipes.
+--   Above-ground  : surface exit pipe → stairs → flag → castle.
+--
+-- Blocked ground cols (row-1+ tiles — enemies must avoid these):
+--   Entry pipe : 13–14     Stair A: 41–44     Stair B: 49–52
+--   Lone brick : 57        Warp   : 162–163, 166–167, 170–171
+--   Exit pipes : 180–181, 184–185, 196–197    Finish: 200–207
 --------------------------------------------------------------------------------
 
 level1_2 :: Level
-level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*3) (208*ts) 1 2
+level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (208*ts) 1 2
   where
-    ground  = mkGround 0 208
-    ceiling = mkCeiling 12 0 208
+    ground = mkGround 0 215
 
-    bricks =
-         mkPlatform 4 2 5
-      ++ mkPlatform 4 7 10
-      ++ mkPlatform 8 2 5
-      ++ mkPlatform 8 7 10
-      ++ mkQLine    4 16 16
-      ++ mkPlatform 4 17 19
-      ++ mkQLine    4 21 21
-      ++ mkPlatform 4 22 24
-      ++ mkPlatform 7 32 34
-      ++ mkQLine    4 48 49
-      ++ mkPlatform 8 48 49
-      ++ mkPlatform 7 64 66
-      ++ mkQLine   10 72 72
-      ++ mkQLine   10 74 74
-      ++ mkQLine   10 76 76
-      ++ mkPlatform 4 96 97
-      ++ mkPlatform 8 96 97
-      ++ mkPlatform 4 112 113
-      ++ mkPlatform 8 112 113
-      ++ mkPlatform 4 128 130
-      ++ mkPlatform 8 128 130
-      ++ mkPlatform 4 144 145
-      ++ mkPlatform 8 144 145
-      ++ mkPlatform 4 160 162
-      ++ mkPlatform 8 160 162
-      ++ mkPlatform 4 176 177
-      ++ mkPlatform 8 176 177
-      ++ mkPlatform 4 192 193
-      ++ mkPlatform 8 192 193
+    -- ── Above-ground intro ────────────────────────────────────────────────
+    -- Step battlements at row 3 across the raised platform.
+    -- Entry pipe at col 13 (height 2). No Piranha — this is the descent point.
+    battlements = mkRow Step 3 0 17
+    entryPipe   = mkPipe 13 2
 
-    pipes    = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(100,2),(108,3)]
-    warp     = mkPipeGroup [(68,2),(72,3),(76,4)]
-    exitPipe = mkPipe 203 2 ++ [Tile 203 3 Step, Tile 204 3 Step]
+    -- ── Cave ceiling ──────────────────────────────────────────────────────
+    -- Starts at col 18 (just past the above-ground cliff) and stops at col 194
+    -- so the surface exit pipe at col 196 rises into open air.
+    caveCeiling = mkCeiling 11 18 194
 
-    tiles = ground ++ ceiling ++ bricks ++ pipes ++ warp ++ exitPipe
+    -- ── Early underground ─────────────────────────────────────────────────
+    -- "? □ □ □ □": reward block + four bricks at row 2 near the cave entrance.
+    questRow = mkQLine 2 32 32 ++ mkPlatform 2 33 36
 
+    -- Ascending brick staircase A (cols 41–44): column i+1 bricks high.
+    stairA = concat [ [Tile (41+i) r Brick | r <- [1..(i+1)]] | i <- [0..3] ]
+
+    -- Ascending brick staircase B (cols 49–52): same pattern.
+    stairB = concat [ [Tile (49+i) r Brick | r <- [1..(i+1)]] | i <- [0..3] ]
+
+    -- Single lone brick (1-tile high) at col 57.
+    loneBrick = [Tile 57 1 Brick]
+
+    -- ── Mid-cave coin + reward cluster ────────────────────────────────────
+    -- ? block at row 5 col 73 (Mushroom for Small Mario, Fire Flower otherwise).
+    midQ = mkQLine 5 73 73
+
+    -- ── Arch / bracket structures ─────────────────────────────────────────
+    -- Arch 1 (cols 88–100):
+    --   Top shelf : row 8, cols 88–100.
+    --   Left leg  : rows 5–7, cols 88–90.
+    --   Right leg : rows 5–7, cols 98–100.
+    --   Interior  : cols 91–97, rows 5–7 → hollow; coins accessible from below.
+    arch1Top  = mkPlatform 8 88 100
+    arch1LLeg = concat [ mkPlatform r 88 90  | r <- [5,6,7] ]
+    arch1RLeg = concat [ mkPlatform r 98 100 | r <- [5,6,7] ]
+
+    -- Arch 2 (cols 108–120):
+    --   Top shelf : row 8, cols 108–120.
+    --   Left leg  : rows 5–7, cols 108–110.
+    --   Right leg : rows 5–7, cols 118–120.
+    --   Interior  : cols 111–117, rows 5–7 → hollow.
+    arch2Top  = mkPlatform 8 108 120
+    arch2LLeg = concat [ mkPlatform r 108 110 | r <- [5,6,7] ]
+    arch2RLeg = concat [ mkPlatform r 118 120 | r <- [5,6,7] ]
+
+    -- ── Warp zone (cols 162–171) ───────────────────────────────────────────
+    -- Heights 2 / 3 / 4 → Worlds 2 / 3 / 4.
+    warpPipe2 = mkPipe 162 2
+    warpPipe3 = mkPipe 166 3
+    warpPipe4 = mkPipe 170 4
+
+    -- ── Underground exit pipes (both with Piranha plants) ─────────────────
+    underExitA = mkPipe 180 2
+    underExitB = mkPipe 184 2
+
+    -- ── Above-ground finish ───────────────────────────────────────────────
+    surfaceExit = mkPipe 196 3
+    finish      = mkStairsUp 200 8
+    flag        = mkFlag 208
+    castle      = mkCastle 211
+
+    tiles = ground
+         ++ entryPipe ++ caveCeiling
+         ++ questRow ++ stairA ++ stairB ++ loneBrick
+         ++ midQ
+         ++ arch1Top ++ arch1LLeg ++ arch1RLeg
+         ++ arch2Top ++ arch2LLeg ++ arch2RLeg
+         ++ warpPipe2 ++ warpPipe3 ++ warpPipe4
+         ++ underExitA ++ underExitB
+         ++ surfaceExit ++ finish ++ flag ++ castle
+
+    -- ── Enemies ───────────────────────────────────────────────────────────
+    -- 8 total — matches the sparse enemy count visible in the reference image.
+    -- Every ground enemy verified clear of all blocked columns above.
     enemies =
-      -- col 40 instead of 38: pipe (38,3) occupies cols 38-39
-      -- col 98 instead of 100: pipe (100,2) occupies cols 100-101
-         map mkG [16,18,36,40,52,54,80,82,98,102,120,122,144,146,160,162,180,182]
-      ++ map mkK [64,96,128]
-      ++ map mkP [(28,1),(38,2),(46,3),(57,3),(100,1),(108,2)]
+      [ mkG 46    -- just past stairA (stairA ends col 44; col 46 clear)
+      , mkG 60    -- after stairB + lone brick (col 57 blocked; 60 clear)
+      , mkK 95    -- Koopa in arch1 hollow (cols 91–97 have no row-1 tiles)
+      , mkG 115   -- Goomba in arch2 hollow (cols 111–117 clear)
+      , mkG 155   -- right cave patrol (col 155 clear; warpPipe2 starts at 162)
+      , mkP (180, 1)  -- Piranha in underExitA
+      , mkP (184, 1)  -- Piranha in underExitB
+      ]
 
-    coins = mkCoins
-      ([(16,6),(17,6),(21,6),(22,6)] ++ [(48,6),(49,6)]
-       ++ [(96,9),(97,9)] ++ [(144,9),(145,9)] ++ [(176,6),(177,6)])
+    -- ── Coins ─────────────────────────────────────────────────────────────
+    -- Mid-cave: 4 coins at row 6 before midQ; 4 coins at row 5 flanking midQ
+    --   (col 73 is occupied by the midQ tile, so those coins skip it).
+    -- Arch interiors: 4 coins at row 6 inside each hollow (reachable by jump).
+    -- Right cave: 6 coins in a row at row 6.
+    coins = mkCoins $
+         [(68,6),(69,6),(70,6),(71,6)]                          -- 4 coins before midQ
+      ++ [(69,5),(70,5),(71,5),(72,5)]                          -- 4 coins flanking midQ
+      ++ [(92,6),(93,6),(94,6),(95,6)]                          -- 4 coins in arch1 hollow
+      ++ [(112,6),(113,6),(114,6),(115,6)]                      -- 4 coins in arch2 hollow
+      ++ [(140,6),(141,6),(142,6),(143,6),(144,6),(145,6)]      -- 6 coins right cave
 
 --------------------------------------------------------------------------------
 -- World 1-3

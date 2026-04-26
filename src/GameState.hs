@@ -93,46 +93,61 @@ step dt gs
     newCoinCount  = rawCoinCount `mod` 100
     livesFromCoins = coinBonus   -- +1 life per 100 coins
 
-    -- ── Lava / timer death ──────────────────────────────────────────────────
-    onLava   = any (\t -> tRow t == (-2) && hit (mBB m6) (tBB t)) (gTiles gs)
-    timerDead = gTimer gs > 0 && (gTimer gs - dt) <= 0   -- just crossed zero
+    onLava    = any (\t -> tRow t == (-2) && hit (mBB m6) (tBB t)) (gTiles gs)
+    timerDead = gTimer gs > 0 && (gTimer gs - dt) <= 0
 
-    m7 | onLava || timerDead = m6 { mState = MDead, mVY = 500, mVX = 0 }
-       | otherwise           = m6
+    -- Only trigger lava/timer death if Mario is still alive.
+    -- Without this guard, MDead Mario falling through the floor hits the
+    -- row -2 ground tiles (created by mkGround for every level), which
+    -- resets mVY = 500 each frame and causes the infinite bounce.
+    m7 | mState m6 /= MDead && (onLava || timerDead) = m6 { mState = MDead, mVY = 500, mVX = 0 }
+       | otherwise                                    = m6
 
-    -- ── Death / lives bookkeeping ─────────────────────────────────────────
+    -- Death / lives bookkeeping
+    -- Detect the exact frame Mario's animation ends (fell off screen).
+    -- Decrement lives HERE so deathCheck receives the correct updated count
+    -- and can properly return Over vs. respawn.
     sx = lStartX currentLevel
     sy = lStartY currentLevel
-    (m8, ph) = deathCheck m7 (gLives gs) sx sy
 
-    lostLife    = ph /= Play || (mState m7 == MDead && mY m7 < -300)
-    newLives    = gLives gs
-                  + livesFromCoins
-                  - (if ph /= Play then 1 else 0)
+    marioDied  = mState m7 == MDead && mY m7 < -300
+    livesAfter = max 0 (gLives gs + livesFromCoins - (if marioDied then 1 else 0))
 
-    -- ── Axe / flag / level-end ────────────────────────────────────────────
+    (m8, ph) = deathCheck m7 livesAfter sx sy
+
+    -- Axe / flag / level-end
     endX       = lEndX currentLevel
     touchedAxe = any (\t -> tType t == Axe && hit (mBB m8) (tBB t)) (gTiles gs)
 
-    ph2 | touchedAxe                       = Win
-        | ph == Play && mX m8 >= endX      = LevelComplete
-        | ph == Over                       = Over
-        | otherwise                        = ph
+    ph2 | touchedAxe                  = Win
+        | ph == Over                  = Over
+        | ph == Play && mX m8 >= endX = LevelComplete
+        | otherwise                   = ph
 
     fb1      = map (stepFirebar dt) (gFirebars gs)
     newTimer = max 0 (gTimer gs - dt)
 
+    -- On respawn, reload the current level so Mario doesn't reappear
+    -- next to the enemy that just killed him.
+    respawning   = marioDied && ph2 == Play
+    activeEnem   = if respawning then lEnemies currentLevel else es3
+    activeCoins  = if respawning then lCoins   currentLevel else cs
+    activePups   = if respawning then lPups    currentLevel else pu3
+    activeTiles  = if respawning then lTiles   currentLevel else ts2
+    activeTimer  = if respawning then 400                   else newTimer
+    activeCam    = if respawning then lStartX  currentLevel else cam
+
     gsTemp = gs { gMario     = m8
-                , gTiles     = ts2
-                , gEnem      = es3
-                , gPups      = pu3
-                , gCoins     = cs
+                , gTiles     = activeTiles
+                , gEnem      = activeEnem
+                , gPups      = activePups
+                , gCoins     = activeCoins
                 , gScore     = sc4
-                , gLives     = max 0 newLives
-                , gCam       = cam
+                , gLives     = livesAfter
+                , gCam       = activeCam
                 , gPhase     = ph2
-                , gFirebars  = fb1
-                , gTimer     = newTimer
+                , gFirebars  = lFirebars currentLevel
+                , gTimer     = activeTimer
                 , gCoinCount = newCoinCount
                 }
 

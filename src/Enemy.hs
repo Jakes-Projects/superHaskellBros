@@ -119,6 +119,7 @@ collideEnemies :: Mario -> [Enemy] -> Int -> Bool -> (Mario, [Enemy], Int)
 collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
   where
     go e (mario, acc, s)
+      | mState mario == MDead       = (mario, e:acc, s)
       | shouldIgnore e              = (mario, e:acc, s)
       | not (hit (mBB mario) (eBB e)) = (mario, e:acc, s)
       | otherwise                   = handleCollision mario e acc s

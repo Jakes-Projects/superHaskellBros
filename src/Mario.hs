@@ -29,7 +29,7 @@ tryJump m
 --     • 'Play' when a life is lost but lives remain (caller decrements the counter)
 deathCheck :: Mario -> Int -> Float -> Float -> (Mario, Phase)
 deathCheck m lv sx sy
-  | mY m < -300 = (resetMario, if lv <= 1 then Over else Play)
+  | mY m < -300 = (resetMario, if lv <= 0 then Over else Play)
   | otherwise   = (m, Play)
   where
     resetMario = m { mX     = sx
