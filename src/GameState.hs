@@ -177,7 +177,7 @@ advanceToNextLevel gs =
 handleEv :: Event -> GS -> GS
 handleEv (EventKey (Char 'r') Down _ _) _ = initGS
 handleEv (EventKey (Char d) Down _ _) gs
-  | d >= '1' && d <= '4' = loadLevel (fromEnum d - fromEnum '1') gs
+  | d >= '1' && d <= '8' = loadLevel (fromEnum d - fromEnum '1') gs
 handleEv _ gs | gPhase gs /= Play = gs
 handleEv ev gs = case ev of
   EventKey k Down _ _ -> gs { gMario = tryJump' k (gMario gs)

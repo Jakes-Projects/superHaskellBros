@@ -395,8 +395,267 @@ level1_4 = mkLevel tiles enemies coins [] firebars (ts*3) (ts*3) (80*ts) 1 4
     coins = mkCoins [(5,2),(6,2),(7,2),(8,2),(9,2),(10,2),(20,2),(25,2),(30,2),(35,2)]
 
 --------------------------------------------------------------------------------
+-- World 2-1
+-- Overworld: denser than 1-1 — more enemies, tighter pipe placement,
+-- multi-row block clusters, and longer stretches between safe ground.
+--------------------------------------------------------------------------------
+
+level2_1 :: Level
+level2_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 2 1
+  where
+    ground = mkGround 0 212
+
+    blocks =
+      -- Cluster 1 (row 3, cols 28-30): B ? B
+         mkPlatform 3 28 28
+      ++ mkQLine    3 29 29
+      ++ mkPlatform 3 30 30
+      -- Cluster 2 (row 3, cols 46-50): B ? B ? B  and row-7 triple
+      ++ mkPlatform 3 46 46
+      ++ mkQLine    3 47 47
+      ++ mkPlatform 3 48 48
+      ++ mkQLine    3 49 49
+      ++ mkPlatform 3 50 50
+      ++ mkQLine    7 47 49
+      -- Cluster 3 (row 3, cols 83-87): B B ? B B
+      ++ mkPlatform 3 83 84
+      ++ mkQLine    3 85 85
+      ++ mkPlatform 3 86 87
+      -- Cluster 4 (row 3, cols 100-102): B ? B
+      ++ mkPlatform 3 100 100
+      ++ mkQLine    3 101 101
+      ++ mkPlatform 3 102 102
+      -- Cluster 5 (rows 3+7, cols 108-111): B B B B / ? B ? B
+      ++ mkPlatform 3 108 111
+      ++ mkQLine    7 108 108
+      ++ mkPlatform 7 109 109
+      ++ mkQLine    7 110 110
+      ++ mkPlatform 7 111 111
+      -- Row-3 solo blocks in the back half
+      ++ mkQLine    3 130 130
+      ++ mkQLine    3 133 133
+      ++ mkPlatform 3 134 136
+      ++ mkQLine    3 160 162
+      ++ mkPlatform 3 163 165
+
+    pipes  = mkPipeGroup [(22,2),(40,3),(55,3),(70,4),(90,2),(150,2),(165,3)]
+    stairs = mkStairsUp 188 4 ++ mkStairsDown 194 4
+    finish = mkStairsUp 196 8
+    flag   = mkFlag 204
+    castle = mkCastle 207
+
+    tiles = ground ++ blocks ++ pipes ++ stairs ++ finish ++ flag ++ castle
+
+    enemies =
+         map mkG [10,28,45,62,80,97,112,126,140,155,170,183,193]
+      ++ map mkK [35,60,86,106,118,158]
+      ++ map mkP [(40,2),(70,3),(165,2)]
+
+    coins = mkCoins $
+         [(47,5),(48,5),(49,5)]       -- above row-3 cluster 2
+      ++ [(85,5)]                     -- above cluster 3 ? block
+      ++ [(101,5)]                    -- above cluster 4 ? block
+      ++ [(108,9),(109,9),(110,9)]    -- above row-7 cluster 5
+      ++ [(130,5),(133,5)]            -- solo Q blocks
+      ++ [(160,5),(161,5),(162,5)]    -- back-half row
+
+--------------------------------------------------------------------------------
+-- World 2-2
+-- NOTE: The original 2-2 is an underwater level with Bloopers and Cheep-cheeps.
+-- Swimming physics and those enemy types are not yet implemented, so this is a
+-- placeholder underground level with a different layout from 1-2.
+-- The ceiling is slightly lower, platforms form an S-curve, and enemies are
+-- denser to reflect the increased difficulty of World 2.
+--------------------------------------------------------------------------------
+
+level2_2 :: Level
+level2_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (208*ts) 2 2
+  where
+    ground = mkGround 0 215
+
+    entryPipe = mkPipe 14 2
+
+    -- Tighter ceiling than 1-2 (row 10 instead of 11)
+    caveCeiling = mkCeiling 10 18 192
+
+    -- Early cave: ? block row + two ascending stair formations
+    questRow = mkQLine 2 30 30 ++ mkPlatform 2 31 34
+    stairA   = concat [ [Tile (42+i) r Brick | r <- [1..(i+1)]] | i <- [0..3] ]
+    stairB   = concat [ [Tile (50+i) r Brick | r <- [1..(i+1)]] | i <- [0..3] ]
+
+    -- Mid-cave: offset platform pair + ? blocks
+    midShelfL  = mkPlatform 4 62 68 ++ mkPlatform 4 72 76
+    midQBlocks = mkQLine 4 69 71
+    highShelf  = mkPlatform 7 80 92
+    highQ      = mkQLine 7 86 87
+
+    -- Right cave: S-curve formations
+    lowerPlat  = mkPlatform 4 98 112
+    lowerQ     = mkQLine 4 105 106
+    upperPlat  = mkPlatform 7 115 130
+    upperQ     = mkQLine 7 122 123
+    finalPlat  = mkPlatform 4 133 148
+
+    -- Warp zone
+    warpPipe2  = mkPipe 162 2
+    warpPipe3  = mkPipe 166 3
+    warpPipe4  = mkPipe 170 4
+
+    -- Two exit pipes with Piranhas
+    underExitA = mkPipe 185 2
+    underExitB = mkPipe 189 2
+
+    surfaceExit = mkPipe 194 3
+    finish      = mkStairsUp 200 8
+    flag        = mkFlag 208
+    castle      = mkCastle 211
+
+    tiles = ground
+         ++ entryPipe ++ caveCeiling
+         ++ questRow ++ stairA ++ stairB
+         ++ midShelfL ++ midQBlocks
+         ++ highShelf ++ highQ
+         ++ lowerPlat ++ lowerQ
+         ++ upperPlat ++ upperQ
+         ++ finalPlat
+         ++ warpPipe2 ++ warpPipe3 ++ warpPipe4
+         ++ underExitA ++ underExitB
+         ++ surfaceExit ++ finish ++ flag ++ castle
+
+    enemies =
+         map mkG [35,56,70,85,100,118,130,148,175,195]
+      ++ map mkK [48,78,110,140]
+      ++ [ mkP (185,1), mkP (189,1) ]
+
+    coins = mkCoins $
+         [(30,4),(31,4),(32,4)]          -- early ? row
+      ++ [(69,6),(70,6),(71,6)]          -- above midShelfL Q blocks
+      ++ [(86,9),(87,9)]                 -- above highShelf Q blocks
+      ++ [(105,6),(106,6)]               -- above lowerPlat Q blocks
+      ++ [(122,9),(123,9)]               -- above upperPlat Q blocks
+
+--------------------------------------------------------------------------------
+-- World 2-3
+-- Overworld with pits: ground is broken into segments with gaps.
+-- Mario must jump the gaps; platforms bridge the wider ones.
+-- Original 2-3 has Hammer Bros; substituted with Koopas.
+--------------------------------------------------------------------------------
+
+level2_3 :: Level
+level2_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (213*ts) 2 3
+  where
+    -- Broken ground segments (gaps between segments are instant death)
+    seg1  = mkGround 0   16
+    seg2  = mkGround 19  36
+    seg3  = mkGround 39  57
+    seg4  = mkGround 60  80
+    seg5  = mkGround 83  110
+    seg6  = mkGround 113 135
+    seg7  = mkGround 138 175
+    seg8  = mkGround 178 220
+    ground = seg1 ++ seg2 ++ seg3 ++ seg4 ++ seg5 ++ seg6 ++ seg7 ++ seg8
+
+    -- Platforms bridging the gaps (also act as collectible routes)
+    plat1 = mkPlatform 3 14 21   -- over gap 17-18
+    plat2 = mkPlatform 4 37 44   -- over gap 37-38
+    plat3 = mkPlatform 3 55 62   -- over gap 58-59
+    plat4 = mkPlatform 5 78 86   -- over gap 81-82
+    plat5 = mkPlatform 3 108 116 -- over gap 111-112
+    plat6 = mkPlatform 4 133 140 -- over gap 136-137
+    plat7 = mkPlatform 3 173 180 -- over gap 176-177
+
+    -- ? blocks sprinkled above the platforms
+    qBlocks =
+         mkQLine 5 15 16
+      ++ mkQLine 6 38 40
+      ++ mkQLine 5 56 57
+      ++ mkQLine 7 79 82
+      ++ mkQLine 5 109 112
+      ++ mkQLine 6 134 136
+      ++ mkQLine 5 174 176
+
+    -- Pipes at the edges of some segments (with Piranhas)
+    pipes = mkPipeGroup [(16,2),(57,2),(110,3),(175,2)]
+
+    finish = mkStairsUp 205 8
+    flag   = mkFlag 213
+    castle = mkCastle 216
+
+    tiles = ground ++ plat1 ++ plat2 ++ plat3 ++ plat4 ++ plat5 ++ plat6 ++ plat7
+         ++ qBlocks ++ pipes ++ finish ++ flag ++ castle
+
+    enemies =
+         map mkG [8,25,45,68,90,106,122,145,165,182,200]
+      ++ map mkK [32,55,85,118,150,170,195]
+      ++ map mkP [(16,1),(57,1),(110,2),(175,1)]
+
+    coins = mkCoins $
+         [(15,7),(16,7)]           -- above plat1 Q blocks
+      ++ [(38,8),(39,8),(40,8)]    -- above plat2 Q blocks
+      ++ [(56,7),(57,7)]           -- above plat3 Q blocks
+      ++ [(79,9),(80,9),(81,9),(82,9)] -- above plat4 Q blocks
+      ++ [(109,7),(110,7),(111,7),(112,7)] -- above plat5 Q blocks
+      ++ [(134,8),(135,8),(136,8)] -- above plat6 Q blocks
+      ++ [(174,7),(175,7),(176,7)] -- above plat7 Q blocks
+
+--------------------------------------------------------------------------------
+-- World 2-4
+-- Bowser's castle: longer and harder than 1-4.
+-- Two lava corridors, three firebars, more enemies, longer bridge to Bowser.
+--------------------------------------------------------------------------------
+
+level2_4 :: Level
+level2_4 = mkLevel tiles enemies coins [] firebars (ts*3) (ts*3) (95*ts) 2 4
+  where
+    -- Floor sections with two lava gaps
+    floorA = mkGround 0  13
+    floorB = mkGround 18 27
+    floorC = mkGround 32 44
+    floorD = mkGround 49 58
+    floorE = mkGround 63 80
+    lava1  = [Tile c (-2) Ground | c <- [14..17]]
+    lava2  = [Tile c (-2) Ground | c <- [28..31]]
+    lava3  = [Tile c (-2) Ground | c <- [45..48]]
+    lava4  = [Tile c (-2) Ground | c <- [59..62]]
+
+    -- Bridge over the final lava stretch, leading to Bowser
+    bridge        = mkBridge 20 90
+    bridgeSupport = mkBridgePosts [20,25,30,35,40,45,50,55,60,65,70,75,80,85,90]
+
+    stairClimb = mkStairsUp 88 6
+    axe        = [Tile 94 1 Axe]
+    castle     = mkCastle 95
+
+    tiles = floorA ++ floorB ++ floorC ++ floorD ++ floorE
+         ++ lava1 ++ lava2 ++ lava3 ++ lava4
+         ++ bridge ++ bridgeSupport
+         ++ stairClimb ++ axe ++ castle
+
+    -- Three firebars: staggered angles so they don't all line up
+    firebars =
+      [ Firebar (24*ts) (3*ts) 0.00 2.6 4
+      , Firebar (44*ts) (3*ts) 1.05 2.2 5
+      , Firebar (68*ts) (3*ts) 2.10 2.0 5
+      ]
+
+    enemies =
+      [ Enemy (6*ts)  ts      (-80) 0 EAlive Goomba
+      , Enemy (9*ts)  ts      (-80) 0 EAlive Goomba
+      , Enemy (20*ts) (ts*2)  (-70) 0 EAlive Koopa  -- on bridge
+      , Enemy (35*ts) (ts*2)  (-70) 0 EAlive Koopa  -- on bridge
+      , Enemy (55*ts) (ts*2)  (-80) 0 EAlive Goomba -- on bridge
+      , Enemy (58*ts) (ts*2)  (-80) 0 EAlive Goomba -- on bridge
+      , mkBowser 80                                  -- Bowser on bridge
+      ]
+
+    coins = mkCoins
+      [(5,2),(6,2),(7,2),(8,2),(22,2),(26,2),(34,2),(38,2),(50,2),(54,2)]
+
+--------------------------------------------------------------------------------
 -- All levels exported
 --------------------------------------------------------------------------------
 
 allLevels :: [Level]
-allLevels = [level1_1, level1_2, level1_3, level1_4]
+allLevels = [ level1_1, level1_2, level1_3, level1_4
+            , level2_1, level2_2, level2_3, level2_4
+            ]
