@@ -61,7 +61,11 @@ data Sprites = Sprites
   , spHillSmall   :: Picture
   , spHillLarge   :: Picture
     -- Collectibles
-  , spMushroom :: Picture
+  , spMushroom    :: Picture
+  , spFireFlower1 :: Picture
+  , spFireFlower2 :: Picture
+  , spFireFlower3 :: Picture
+  , spFireFlower4 :: Picture
   , spCoin1    :: Picture
   , spCoin2    :: Picture
   , spCoin3    :: Picture
@@ -133,6 +137,10 @@ loadSprites = Sprites
   <*> loadPNG "assets/hill_large.png"
   -- Collectibles
   <*> loadPNG "assets/mushroom.png"
+  <*> loadPNG "assets/fire_flower_1.png"
+  <*> loadPNG "assets/fire_flower_2.png"
+  <*> loadPNG "assets/fire_flower_3.png"
+  <*> loadPNG "assets/fire_flower_4.png"
   <*> loadPNG "assets/coin_1.png"
   <*> loadPNG "assets/coin_2.png"
   <*> loadPNG "assets/coin_3.png"
@@ -158,7 +166,7 @@ draw spr gs = return $ pictures
       , drawTilesOfType spr clock isGround   (gTiles gs)
       , drawTilesOfType spr clock (not.isGround) (gTiles gs)
       , drawCoins   spr clock (gCoins gs)
-      , drawPups    spr       (gPups  gs)
+      , drawPups    spr clock (gPups  gs)
       , drawFirebars          (gFirebars gs)
       , drawEnem    spr clock (gEnem  gs)
       , drawMario   spr       (gMario gs)
@@ -475,44 +483,27 @@ drawFireball x y =
 
 -- ─── Power-ups ────────────────────────────────────────────────────────────────
 
-drawPups :: Sprites -> [PUp] -> Picture
-drawPups spr = pictures . map (drawPup spr)
+drawPups :: Sprites -> Float -> [PUp] -> Picture
+drawPups spr clock = pictures . map (drawPup spr clock)
 
-drawPup :: Sprites -> PUp -> Picture
-drawPup spr p
+drawPup :: Sprites -> Float -> PUp -> Picture
+drawPup spr clock p
   | not (pAlive p) = blank
   | otherwise      = translate (pX p + ts/2) (pY p) pic
   where
     pic = case pType p of
             Mushroom   -> spMushroom spr
-            FireFlower -> drawFireFlower
-            Star       -> spMushroom spr   -- placeholder until star sprite added
+            FireFlower -> fireFlowerFrame spr clock
+            Star       -> spMushroom spr
 
--- | Fire Flower primitive: orange petals + green stem, no external asset needed.
-drawFireFlower :: Picture
-drawFireFlower = pictures
-  [ -- Stem
-    color (makeColorI 0 180 0 255)
-      (translate 0 (-ts*0.25) (rectangleSolid (ts*0.12) (ts*0.5)))
-    -- Leaves
-  , color (makeColorI 0 200 0 255)
-      (translate (-ts*0.2) (-ts*0.1) (scale (ts*0.25) (ts*0.15) (circleSolid 1)))
-  , color (makeColorI 0 200 0 255)
-      (translate ( ts*0.2) (-ts*0.1) (scale (ts*0.25) (ts*0.15) (circleSolid 1)))
-    -- Red centre petal ring
-  , color (makeColorI 220 50 0 255) (circleSolid (ts*0.3))
-    -- Orange outer petals (4 directions)
-  , color (makeColorI 255 140 0 255)
-      (translate 0 (ts*0.28) (circleSolid (ts*0.18)))
-  , color (makeColorI 255 140 0 255)
-      (translate 0 (-ts*0.28) (circleSolid (ts*0.18)))
-  , color (makeColorI 255 140 0 255)
-      (translate (ts*0.28) 0 (circleSolid (ts*0.18)))
-  , color (makeColorI 255 140 0 255)
-      (translate (-ts*0.28) 0 (circleSolid (ts*0.18)))
-    -- White dot centre
-  , color white (circleSolid (ts*0.12))
-  ]
+fireFlowerFrame :: Sprites -> Float -> Picture
+fireFlowerFrame spr clock =
+  let frame = (floor (clock * 8) :: Int) `mod` 4
+  in case frame of
+       0 -> spFireFlower1 spr
+       1 -> spFireFlower2 spr
+       2 -> spFireFlower3 spr
+       _ -> spFireFlower4 spr
 
 -- Coins
 drawCoins :: Sprites -> Float -> [(Float,Float,Bool)] -> Picture
