@@ -12,7 +12,7 @@ data-files:    assets/*.png
 executable mario
   main-is:          Main.hs
   other-modules:    Constants, Types, Physics, Mario, Enemy,
-                    PowerUp, Level, Rendering, GameState
+                    PowerUp, Level, Rendering, GameState, Fireball
   hs-source-dirs:   app, src
   build-depends:    base >=4.14,
                     gloss,

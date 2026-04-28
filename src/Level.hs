@@ -74,7 +74,7 @@ mkLevel
 mkLevel ts_ es cs ps fs sx sy ex w n = Level ts_ es cs ps fs sx sy ex w n
 
 initMarioFromLevel :: Level -> Mario
-initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0
+initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0 0
 
 --------------------------------------------------------------------------------
 -- Enemy helpers

@@ -163,11 +163,12 @@ draw spr gs = return $ pictures
     clock = mAnim (gMario gs)
     world = pictures
       [ drawDecorations spr
-      , drawTilesOfType spr clock isGround   (gTiles gs)
+      , drawTilesOfType spr clock isGround      (gTiles gs)
       , drawTilesOfType spr clock (not.isGround) (gTiles gs)
       , drawCoins   spr clock (gCoins gs)
       , drawPups    spr clock (gPups  gs)
-      , drawFirebars          (gFirebars gs)
+      , drawFirebars          (gFirebars  gs)
+      , drawPlayerFireballs   (gFireballs gs) clock
       , drawEnem    spr clock (gEnem  gs)
       , drawMario   spr       (gMario gs)
       ]
@@ -480,6 +481,26 @@ drawFirebar fb = pictures
 drawFireball :: Float -> Float -> Picture
 drawFireball x y =
   translate x y $ color (makeColorI 255 100 0 255) (circleSolid (ts*0.3))
+
+-- ─── Player fireballs ─────────────────────────────────────────────────────────
+ 
+drawPlayerFireballs :: [Fireball] -> Float -> Picture
+drawPlayerFireballs fbs clock = pictures (map (drawPlayerFireball clock) fbs)
+ 
+-- | Animates between white and orange on alternate frames, like the NES original.
+drawPlayerFireball :: Float -> Fireball -> Picture
+drawPlayerFireball clock fb
+  | not (fiAlive fb) = blank
+  | otherwise = translate (fiX fb) (fiY fb) $
+      if even (floor (clock * 12) :: Int)
+        then pictures
+               [ color white                         (circleSolid (ts * 0.28))
+               , color (makeColorI 255 180 0 255)    (circleSolid (ts * 0.16))
+               ]
+        else pictures
+               [ color (makeColorI 255 200 80 255)   (circleSolid (ts * 0.28))
+               , color white                         (circleSolid (ts * 0.14))
+               ]  
 
 -- ─── Power-ups ────────────────────────────────────────────────────────────────
 

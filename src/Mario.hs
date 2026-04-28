@@ -39,5 +39,6 @@ deathCheck m lv sx sy
                    , mState = Small
                    , mFace  = 1
                    , mInv   = 0
+                   , mFireCool = 0
                    , mGround = False
                    }
