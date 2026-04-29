@@ -16,6 +16,7 @@ data EnemyState
   | EDead Float
   | EShell Float Bool
   | EPiranha Float Bool
+  | EBowser Float Float Float   -- fireTimer, jumpTimer, idleTimer (counts down from 5)
   deriving (Eq, Show)
 
 data Enemy = Enemy
@@ -43,6 +44,7 @@ data Mario = Mario
   , mAnim       :: Float
   , mInv        :: Float
   , mFireCool   :: Float   -- seconds until next fireball can be shot
+  , mCrouch     :: Bool    -- crouching (Big/Fire only, grounded, down held)
   } deriving Show
 
 -- | A fireball shot by Fire Mario.
@@ -51,9 +53,10 @@ data Fireball = Fireball
   { fiX, fiY   :: Float
   , fiVX, fiVY :: Float
   , fiAlive    :: Bool
+  , fiBowser   :: Bool   -- True = Bowser's fire (straight, no bounce)
   } deriving Show
 
-data KS = KS { kL, kR, kJ, kRun :: Bool } deriving Show
+data KS = KS { kL, kR, kJ, kRun, kD :: Bool } deriving Show
 
 data Phase = Play | Over | Win | LevelComplete deriving (Eq, Show)
 

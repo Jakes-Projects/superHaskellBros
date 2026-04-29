@@ -33,6 +33,7 @@ data Sprites = Sprites
   , spFireRun3    :: Picture
   , spFireJump    :: Picture
   , spFireSkid    :: Picture
+  , spFireCrouch  :: Picture
     -- Goomba
   , spGoomba1       :: Picture
   , spGoomba2       :: Picture
@@ -42,6 +43,13 @@ data Sprites = Sprites
   , spKoopa2         :: Picture
   , spKoopaShell     :: Picture
   , spKoopaResetting :: Picture
+    -- Bowser
+  , spBowser1     :: Picture
+  , spBowser2     :: Picture
+  , spBowser3     :: Picture
+  , spBowser4     :: Picture
+  , spBowserFire1 :: Picture
+  , spBowserFire2 :: Picture
     -- Blocks
   , spBlockGround      :: Picture
   , spBlockBrick       :: Picture
@@ -66,6 +74,10 @@ data Sprites = Sprites
   , spFireFlower2 :: Picture
   , spFireFlower3 :: Picture
   , spFireFlower4 :: Picture
+  , spFireball1   :: Picture
+  , spFireball2   :: Picture
+  , spFireball3   :: Picture
+  , spFireball4   :: Picture
   , spCoin1    :: Picture
   , spCoin2    :: Picture
   , spCoin3    :: Picture
@@ -108,6 +120,7 @@ loadSprites = Sprites
   <*> loadPNG "assets/mario_fire_run_3.png"
   <*> loadPNG "assets/mario_fire_jump.png"
   <*> loadPNG "assets/mario_fire_skid.png"
+  <*> loadPNG "assets/mario_fire_crouch.png"
   -- Goomba
   <*> loadPNG "assets/goomba_1.png"
   <*> loadPNG "assets/goomba_2.png"
@@ -117,6 +130,13 @@ loadSprites = Sprites
   <*> loadPNG "assets/koopa_green_2.png"
   <*> loadPNG "assets/koopa_green_shell.png"
   <*> loadPNG "assets/koopa_green_resetting.png"
+  -- Bowser
+  <*> loadPNG "assets/bowser_1.png"
+  <*> loadPNG "assets/bowser_2.png"
+  <*> loadPNG "assets/bowser_3.png"
+  <*> loadPNG "assets/bowser_4.png"
+  <*> loadPNG "assets/bowser_fire_1.png"
+  <*> loadPNG "assets/bowser_fire_2.png"
   -- Blocks
   <*> loadPNG "assets/block_ground.png"
   <*> loadPNG "assets/block_brick.png"
@@ -141,6 +161,10 @@ loadSprites = Sprites
   <*> loadPNG "assets/fire_flower_2.png"
   <*> loadPNG "assets/fire_flower_3.png"
   <*> loadPNG "assets/fire_flower_4.png"
+  <*> loadPNG "assets/fireball_1.png"
+  <*> loadPNG "assets/fireball_2.png"
+  <*> loadPNG "assets/fireball_3.png"
+  <*> loadPNG "assets/fireball_4.png"
   <*> loadPNG "assets/coin_1.png"
   <*> loadPNG "assets/coin_2.png"
   <*> loadPNG "assets/coin_3.png"
@@ -167,8 +191,8 @@ draw spr gs = return $ pictures
       , drawTilesOfType spr clock (not.isGround) (gTiles gs)
       , drawCoins   spr clock (gCoins gs)
       , drawPups    spr clock (gPups  gs)
-      , drawFirebars          (gFirebars  gs)
-      , drawPlayerFireballs   (gFireballs gs) clock
+      , drawFirebars spr clock (gFirebars gs)
+      , drawPlayerFireballs spr clock (gFireballs gs)
       , drawEnem    spr clock (gEnem  gs)
       , drawMario   spr       (gMario gs)
       ]
@@ -189,11 +213,15 @@ drawMario spr m
         $ spMarioDeath spr
   | blink = blank
   | otherwise =
-      translate (mX m) (mY m)
+      translate (mX m) drawY
         $ scale (marioScale * fromIntegral (mFace m)) marioScale
         $ pickMarioFrame spr m
   where
-    blink = mInv m > 0 && even (floor (mInv m * 10) :: Int)
+    blink  = mInv m > 0 && even (floor (mInv m * 10) :: Int)
+    -- When crouching, Big/Fire Mario's BB shrinks to small height (ts instead of ts*2).
+    -- The physics center mY stays put, so the sprite floats ts/2 above the ground.
+    -- Shift the sprite down by ts/2 to keep the feet at the correct world position.
+    drawY  = if mCrouch m then mY m - ts/2 else mY m
 
 pickMarioFrame :: Sprites -> Mario -> Picture
 pickMarioFrame spr m =
@@ -202,11 +230,13 @@ pickMarioFrame spr m =
       skidding = (mFace m == 1    && mVX m < -10)
               || (mFace m == (-1) && mVX m >  10)
       still    = abs (mVX m) < 5 && mGround m
+      crouching = mCrouch m
   in case mState m of
-       Big   -> pickBigFrame   spr airborne skidding still wFrame
-       Fire  -> pickFireFrame  spr airborne skidding still wFrame
+       Big   -> pickBigFrame   spr airborne skidding still crouching wFrame
+       Fire  -> pickFireFrame  spr airborne skidding still crouching wFrame
        _     -> pickSmallFrame spr airborne skidding still wFrame
 
+-- Small Mario has no crouch sprite — crouch only applies to Big/Fire
 pickSmallFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
 pickSmallFrame spr airborne skidding still wFrame
   | airborne  = spMarioJump  spr
@@ -216,26 +246,25 @@ pickSmallFrame spr airborne skidding still wFrame
   | wFrame == 1 = spMarioRun2 spr
   | otherwise   = spMarioRun3 spr
 
-pickBigFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
-pickBigFrame spr airborne skidding still wFrame
-  | airborne  = spBigJump  spr
-  | skidding  = spBigSkid  spr
-  | still     = spBigStand spr
-  | wFrame == 0 = spBigRun1 spr
-  | wFrame == 1 = spBigRun2 spr
-  | otherwise   = spBigRun3 spr
+pickBigFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
+pickBigFrame spr airborne skidding still crouching wFrame
+  | crouching   = spBigCrouch spr
+  | airborne    = spBigJump   spr
+  | skidding    = spBigSkid   spr
+  | still       = spBigStand  spr
+  | wFrame == 0 = spBigRun1   spr
+  | wFrame == 1 = spBigRun2   spr
+  | otherwise   = spBigRun3   spr
 
--- | Fire Mario uses the same frame logic as Big Mario but picks the fire
---   palette sprites.  If those assets are missing the loader already
---   substituted magenta placeholders, so the game won't crash.
-pickFireFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
-pickFireFrame spr airborne skidding still wFrame
-  | airborne  = spFireJump  spr
-  | skidding  = spFireSkid  spr
-  | still     = spFireStand spr
-  | wFrame == 0 = spFireRun1 spr
-  | wFrame == 1 = spFireRun2 spr
-  | otherwise   = spFireRun3 spr
+pickFireFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
+pickFireFrame spr airborne skidding still crouching wFrame
+  | crouching   = spFireCrouch spr
+  | airborne    = spFireJump   spr
+  | skidding    = spFireSkid   spr
+  | still       = spFireStand  spr
+  | wFrame == 0 = spFireRun1   spr
+  | wFrame == 1 = spFireRun2   spr
+  | otherwise   = spFireRun3   spr
 
 -- ─── Enemies ──────────────────────────────────────────────────────────────────
 
@@ -246,6 +275,7 @@ drawE :: Sprites -> Float -> Enemy -> Picture
 drawE spr clock e = case eState e of
   EDead _         -> translate cx (eY e + 5)          (spGoombaCrushed spr)
   EShell _ moving -> translate cx (eY e + spriteHalf) (shellPic moving)
+  EBowser _ _ _   -> translate cx (eY e + spriteHalf) (drawEnemyBody spr clock e)
   _               ->
     if shouldDrawAlive (eState e)
       then translate cx (eY e + spriteHalf) (drawEnemyBody spr clock e)
@@ -268,30 +298,20 @@ drawEnemyBody spr clock e = case eType e of
   Goomba  -> scale marioScale marioScale $ goombaFrame spr clock
   Koopa   -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr clock e
   Piranha -> translate 0 (ts * 0.6) drawPiranha
-  Bowser  -> drawBowser e
+  Bowser  -> drawBowser spr clock e
 
--- | Bowser: a large dark turtle-dragon primitive.
---   Two tiles wide and slightly taller than a Koopa.
-drawBowser :: Enemy -> Picture
-drawBowser _ = pictures
-  [ -- Shell / body
-    color (makeColorI 34 139 34 255) (rectangleSolid (ts*2) (ts*1.6))
-    -- Belly
-  , color (makeColorI 222 184 135 255) (translate 0 (-ts*0.1) (rectangleSolid (ts*1.2) (ts*0.9)))
-    -- Head
-  , color (makeColorI 34 139 34 255) (translate (ts*0.6) (ts*0.9) (rectangleSolid (ts*0.9) (ts*0.7)))
-    -- Eye
-  , color white (translate (ts*0.75) (ts*1.05) (circleSolid (ts*0.18)))
-  , color black (translate (ts*0.82) (ts*1.05) (circleSolid (ts*0.09)))
-    -- Horns
-  , color (makeColorI 255 200 0 255) (translate (ts*0.3)  (ts*1.4) (rectangleSolid (ts*0.18) (ts*0.4)))
-  , color (makeColorI 255 200 0 255) (translate (ts*0.85) (ts*1.4) (rectangleSolid (ts*0.18) (ts*0.4)))
-    -- Spiked shell
-  , color (makeColorI 100 200 100 255) (translate 0 (ts*0.15) (rectangleSolid (ts*1.9) (ts*1.1)))
-  , color (makeColorI 255 200 0 255) (translate (-ts*0.5) (ts*0.5) (circleSolid (ts*0.22)))
-  , color (makeColorI 255 200 0 255) (translate 0         (ts*0.6) (circleSolid (ts*0.22)))
-  , color (makeColorI 255 200 0 255) (translate ( ts*0.5) (ts*0.5) (circleSolid (ts*0.22)))
-  ]
+-- Bowser cycles through 4 walk frames at half speed (clock * 4 mod 4).
+-- Sprite faces LEFT by default — flip when moving RIGHT (eVX > 0).
+drawBowser :: Sprites -> Float -> Enemy -> Picture
+drawBowser spr clock e =
+  let frame   = (floor (clock * 4) :: Int) `mod` 4
+      walkPic = case frame of
+                  0 -> spBowser1 spr
+                  1 -> spBowser2 spr
+                  2 -> spBowser3 spr
+                  _ -> spBowser4 spr
+      facing  = if eVX e > 0 then -1 else 1 :: Float
+  in scale (marioScale * facing) marioScale walkPic
 
 koopaFace :: Enemy -> Float
 koopaFace e = if eVX e >= 0 then 1 else -1
@@ -465,12 +485,12 @@ drawPiranha = pictures
       (translate (ts*0.3) (-ts*0.1) (scale (ts*0.2) (ts*0.15) (circleSolid 1)))
   ]
 
-drawFirebars :: [Firebar] -> Picture
-drawFirebars = pictures . map drawFirebar
+drawFirebars :: Sprites -> Float -> [Firebar] -> Picture
+drawFirebars spr clock = pictures . map (drawFirebar spr clock)
 
-drawFirebar :: Firebar -> Picture
-drawFirebar fb = pictures
-  [ drawFireball (fbX fb + dx) (fbY fb + dy)
+drawFirebar :: Sprites -> Float -> Firebar -> Picture
+drawFirebar spr clock fb = pictures
+  [ drawFireball spr clock (fbX fb + dx) (fbY fb + dy)
   | i <- [0..fbLength fb - 1]
   , let spacing = ts * 0.8
         angle   = fbAngle fb
@@ -478,29 +498,36 @@ drawFirebar fb = pictures
         dy = spacing * fromIntegral i * sin angle
   ]
 
-drawFireball :: Float -> Float -> Picture
-drawFireball x y =
-  translate x y $ color (makeColorI 255 100 0 255) (circleSolid (ts*0.3))
+drawFireball :: Sprites -> Float -> Float -> Float -> Picture
+drawFireball spr clock x y =
+  translate x y (fireballFrame spr clock)
 
--- ─── Player fireballs ─────────────────────────────────────────────────────────
- 
-drawPlayerFireballs :: [Fireball] -> Float -> Picture
-drawPlayerFireballs fbs clock = pictures (map (drawPlayerFireball clock) fbs)
- 
--- | Animates between white and orange on alternate frames, like the NES original.
-drawPlayerFireball :: Float -> Fireball -> Picture
-drawPlayerFireball clock fb
+fireballFrame :: Sprites -> Float -> Picture
+fireballFrame spr clock =
+  let frame = (floor (clock * 8) :: Int) `mod` 4
+  in case frame of
+       0 -> spFireball1 spr
+       1 -> spFireball2 spr
+       2 -> spFireball3 spr
+       _ -> spFireball4 spr
+
+drawPlayerFireballs :: Sprites -> Float -> [Fireball] -> Picture
+drawPlayerFireballs spr clock = pictures . map (drawPlayerFireball spr clock)
+
+drawPlayerFireball :: Sprites -> Float -> Fireball -> Picture
+drawPlayerFireball spr clock fb
   | not (fiAlive fb) = blank
-  | otherwise = translate (fiX fb) (fiY fb) $
-      if even (floor (clock * 12) :: Int)
-        then pictures
-               [ color white                         (circleSolid (ts * 0.28))
-               , color (makeColorI 255 180 0 255)    (circleSolid (ts * 0.16))
-               ]
-        else pictures
-               [ color (makeColorI 255 200 80 255)   (circleSolid (ts * 0.28))
-               , color white                         (circleSolid (ts * 0.14))
-               ]  
+  | fiBowser fb      = translate (fiX fb) (fiY fb)
+                         $ scale (if fiVX fb > 0 then -1 else 1) 1
+                         $ bowserFireFrame spr clock
+  | otherwise        = translate (fiX fb) (fiY fb) (fireballFrame spr clock)
+
+-- Bowser fire cycles between the two bowser_fire sprites at 8fps
+bowserFireFrame :: Sprites -> Float -> Picture
+bowserFireFrame spr clock =
+  if even (floor (clock * 8) :: Int)
+    then spBowserFire1 spr
+    else spBowserFire2 spr
 
 -- ─── Power-ups ────────────────────────────────────────────────────────────────
 

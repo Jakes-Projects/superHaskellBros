@@ -74,7 +74,7 @@ mkLevel
 mkLevel ts_ es cs ps fs sx sy ex w n = Level ts_ es cs ps fs sx sy ex w n
 
 initMarioFromLevel :: Level -> Mario
-initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0 0
+initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0 0 False
 
 --------------------------------------------------------------------------------
 -- Enemy helpers
@@ -98,7 +98,7 @@ mkP (c, r) = Enemy (fromIntegral c * ts) (fromIntegral r * ts) 0 0 (EPiranha 0 F
 -- | Bowser: 2-tile-wide, spawns at column c.
 --   y = ts*2 places him on top of the row-1 bridge tiles (bridge top = 2*ts).
 mkBowser :: Int -> Enemy
-mkBowser c = Enemy (fromIntegral c * ts) (ts*2) (-60) 0 EAlive Bowser
+mkBowser c = Enemy (fromIntegral c * ts) (ts*2) (-60) 0 (EBowser 3.0 4.0 5.0) Bowser
 
 --------------------------------------------------------------------------------
 -- World 1-1

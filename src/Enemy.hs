@@ -4,9 +4,10 @@ import Constants (ts, grav)
 import Types
 import Physics (hit, mBB, tBB, eBB, solid)
 
-stepEnemy :: Float -> [Tile] -> Enemy -> Enemy
-stepEnemy dt sol e = case eState e of
-  EAlive      -> stepAlive dt sol e
+stepEnemy :: Float -> [Tile] -> Mario -> Enemy -> Enemy
+stepEnemy dt sol mario e = case eState e of
+  EAlive        -> stepAlive dt sol mario e
+  EBowser _ _ _ -> stepAlive dt sol mario e
   EDead timer -> let t' = timer - dt
                  in if t' <= 0 then e { eState = EDead 0 }
                                else e { eState = EDead t' }
@@ -25,10 +26,10 @@ stepEnemy dt sol e = case eState e of
         targetY = if newUp then baseY + ts else baseY
     in e { eState = EPiranha newTimer newUp, eY = targetY }
 
-stepAlive :: Float -> [Tile] -> Enemy -> Enemy
-stepAlive dt sol e
+stepAlive :: Float -> [Tile] -> Mario -> Enemy -> Enemy
+stepAlive dt sol mario e
   | eType e == Piranha = e
-  | eType e == Bowser  = stepBowser dt sol e
+  | eType e == Bowser  = stepBowser dt sol mario e
   | otherwise = e { eX = ex', eVX = vx', eY = ey', eVY = vy' }
   where
     ex0   = eX e + eVX e * dt
@@ -53,15 +54,36 @@ stepAlive dt sol e
     snapY = maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles)
     (ey', vy') = if onG then (snapY, 0) else (ey0, vy0)
 
--- | Bowser paces back and forth on the bridge, never turns at edges
---   (he'd fall off otherwise), and is not subject to gravity stacking.
-stepBowser :: Float -> [Tile] -> Enemy -> Enemy
-stepBowser dt sol e = e { eX = ex', eVX = vx', eY = ey', eVY = vy' }
+-- | Bowser always faces Mario. After a 5s idle he follows Mario when
+--   within 10 tiles, otherwise paces on the bridge.
+stepBowser :: Float -> [Tile] -> Mario -> Enemy -> Enemy
+stepBowser dt sol mario e = e { eX = ex', eVX = vx', eY = ey', eVY = vy', eState = newState }
   where
-    ex0   = eX e + eVX e * dt
+    (ft, jt, it) = case eState e of
+                     EBowser f j i -> (f, j, i)
+                     _             -> (3.0, 4.0, 5.0)
+
+    ft'      = if ft - dt <= 0 then 3.0 else ft - dt
+    jt'      = if jt - dt <= 0 then 4.0 else jt - dt
+    it'      = max 0 (it - dt)
+    newState = EBowser ft' jt' it'
+
+    idle  = it > 0
+    -- Direction toward Mario (always face him)
+    marioDir  = if mX mario < eX e then -1 else 1 :: Float
+    -- Follow Mario when within 10 tiles, otherwise pace (reverse at walls)
+    closeToMario = abs (mX mario - eX e) < 10 * ts
+    desiredVX
+      | idle           = 0
+      | closeToMario   = 60 * marioDir   -- chase at same speed as before
+      | otherwise      = eVX e           -- keep current pacing velocity
+
+    ex0   = eX e + desiredVX * dt
     wallX = any (hit (ex0 + ts, eY e + ts, ts*1.4, ts*1.4) . tBB) sol
-    vx'   = if wallX then -eVX e else eVX e
-    ex'   = if wallX then eX e   else ex0
+    vx'   = if idle then 0
+            else if wallX then -desiredVX
+            else desiredVX
+    ex'   = if wallX then eX e else ex0
 
     vy0   = eVY e + grav * dt
     ey0   = eY e + vy0 * dt
@@ -71,7 +93,11 @@ stepBowser dt sol e = e { eX = ex', eVX = vx', eY = ey', eVY = vy' }
                        sol
     onG   = not (null landTiles)
     snapY = if onG then maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles) else ey0
-    (ey', vy') = if onG then (snapY, 0) else (ey0, vy0)
+
+    jumpVY = if jt - dt <= 0 && onG && not idle then 550 else vy0
+    (ey', vy') = if onG && jumpVY == vy0 then (snapY, 0)
+                 else if jt - dt <= 0    then (eY e, jumpVY)
+                 else                        (ey0, vy0)
 
 stepShellStationary :: Float -> [Tile] -> Enemy -> Enemy
 stepShellStationary dt sol e = e { eY = ey', eVY = vy' }
@@ -172,9 +198,10 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
 
     isStationaryShell e = case eState e of EShell _ False -> True; _ -> False
     isDangerous e = case eState e of
-      EAlive       -> True
+      EAlive        -> True
+      EBowser _ _ _ -> True
       EShell _ True -> True
-      _            -> False
+      _             -> False
 
     -- | Damage Mario by exactly one power level.
     --   Fire → Big → Small → MDead

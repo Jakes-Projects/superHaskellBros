@@ -46,6 +46,7 @@ spawnFireball m fbs
               , fiVX   = fireballSpeedX * dir
               , fiVY   = 0
               , fiAlive = True
+              , fiBowser = False
               }
 
 -- ─── Step ────────────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ spawnFireball m fbs
 stepFireball :: Float -> [Tile] -> Fireball -> Fireball
 stepFireball dt sol fb
   | not (fiAlive fb) = fb
+  | fiBowser fb      = stepBowserFire dt sol fb
   | otherwise        = fb { fiX = x', fiY = y', fiVY = vy', fiAlive = alive' }
   where
     solidTiles = filter (solid . tType) sol
@@ -92,6 +94,17 @@ stepFireball dt sol fb
             | groundHit = fireBounceVY
             | otherwise = vy0
     alive' = not wallHit && not offScreen
+
+-- Bowser fire travels straight horizontally; destroyed on any solid contact.
+stepBowserFire :: Float -> [Tile] -> Fireball -> Fireball
+stepBowserFire dt sol fb = fb { fiX = x', fiAlive = alive' }
+  where
+    solidTiles = filter (solid . tType) sol
+    x1     = fiX fb + fiVX fb * dt
+    tileHit = any (hit (x1, fiY fb, fireballHalf*2, fireballHalf*2) . tBB) solidTiles
+    offSc  = fiX fb < -200 || fiX fb > 10000
+    x'     = if tileHit then fiX fb else x1
+    alive' = not tileHit && not offSc
 
 -- ─── Enemy collision ─────────────────────────────────────────────────────────
 
