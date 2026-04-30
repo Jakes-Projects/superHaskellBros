@@ -298,49 +298,90 @@ level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (208*ts) 1 2
 
 --------------------------------------------------------------------------------
 -- World 1-3
--- Treetop level: Mario walks across stacked brick platforms (tree canopy).
+-- Treetop level redesigned for static platforms.
+-- All gaps are ≤2 tiles wide *or* have an intermediate platform that is
+-- easily reachable.  The level still features raised brick structures,
+-- scattered ? blocks, and coins above the canopies.
 --------------------------------------------------------------------------------
 
 level1_3 :: Level
-level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (244*ts) 1 3
+level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (240*ts) 1 3
   where
-    ground = mkGround 0 244
+    -- Continuous ground, broken only by narrow (2‑tile) gaps.
+    ground = concat
+      [ mkGround 0   15
+      , mkGround 18  37
+      , mkGround 40  61
+      , mkGround 64  85
+      , mkGround 88 109
+      , mkGround 112 133
+      , mkGround 136 157
+      , mkGround 160 181
+      , mkGround 184 205
+      , mkGround 208 250   -- extended to cover the flagpole area
+      ]
 
-    islands =
-         mkPlatform 3 10 12 ++ mkPlatform 4 10 12
-      ++ mkPlatform 3 16 19 ++ mkPlatform 4 16 19
-      ++ mkPlatform 5 26 29 ++ mkPlatform 5 30 31
-      ++ mkPlatform 4 34 36 ++ mkPlatform 5 34 36
-      ++ mkPlatform 3 48 50 ++ mkPlatform 4 48 50
-      ++ mkPlatform 4 58 60 ++ mkPlatform 5 58 60
-      ++ mkPlatform 7 72 74 ++ mkPlatform 8 72 74
-      ++ mkPlatform 5 90 93 ++ mkPlatform 6 90 93
-      ++ mkPlatform 4 106 108 ++ mkPlatform 5 106 108
-      ++ mkPlatform 6 122 125 ++ mkPlatform 7 122 125
-      ++ mkPlatform 4 138 140 ++ mkPlatform 5 138 140
-      ++ mkPlatform 7 154 157 ++ mkPlatform 8 154 157
-      ++ mkPlatform 4 170 172 ++ mkPlatform 5 170 172
-      ++ mkPlatform 6 186 189 ++ mkPlatform 7 186 189
-      ++ mkPlatform 4 202 204 ++ mkPlatform 5 202 204
-      ++ mkPlatform 7 218 221 ++ mkPlatform 8 218 221
-      ++ mkPlatform 4 234 236 ++ mkPlatform 5 234 236
+    -- Low platforms that bridge the gaps.
+    platforms =
+         mkPlatform 3 14 19
+      ++ mkPlatform 3 36 41
+      ++ mkPlatform 3 62 67
+      ++ mkPlatform 3 84 89
+      ++ mkPlatform 3 108 113
+      ++ mkPlatform 3 132 137
+      ++ mkPlatform 3 156 161
+      ++ mkPlatform 3 180 185
+      ++ mkPlatform 3 204 209
 
-    jumps =
-         mkQLine 4 16 17
-      ++ mkQLine 6 48 48
-      ++ mkQLine 5 80 81
-      ++ mkQLine 6 112 112
-      ++ mkQLine 5 144 145
-      ++ mkQLine 6 176 176
-      ++ mkQLine 4 208 209
+    -- Raised treetop platforms (optional).
+    highPlatforms =
+         mkPlatform 5 26 29
+      ++ mkPlatform 6 48 51
+      ++ mkPlatform 7 72 75
+      ++ mkPlatform 5 96 99
+      ++ mkPlatform 6 120 123
+      ++ mkPlatform 5 144 147
+      ++ mkPlatform 7 168 171
+      ++ mkPlatform 5 192 195
+      ++ mkPlatform 6 216 219
 
-    tiles = ground ++ islands ++ jumps
+    -- ? blocks on raised platforms.
+    qBlocks =
+         mkQLine 7 27 28
+      ++ mkQLine 8 49 50
+      ++ mkQLine 9 73 74
+      ++ mkQLine 7 97 98
+      ++ mkQLine 8 121 122
+      ++ mkQLine 7 145 146
+      ++ mkQLine 9 169 170
+      ++ mkQLine 7 193 194
+      ++ mkQLine 8 217 218
 
-    enemies = map mkG [16,18,50,82,114,146,178,210] ++ map mkK [64,128,192]
-    coins = mkCoins
-      ([(c,4) | c <- [26..29]] ++ [(c,5) | c <- [90..93]] ++ [(c,4) | c <- [122..125]]
-       ++ [(c,5) | c <- [154..157]] ++ [(c,4) | c <- [186..189]] ++ [(c,4) | c <- [218..221]]
-       ++ [(16,6),(17,6),(48,8),(80,7),(81,7),(112,8),(144,7),(145,7),(176,8),(208,6),(209,6)])
+    -- Decorative brick clusters.
+    decor =
+         mkPlatform 4 20 22
+      ++ mkPlatform 5 42 44
+      ++ mkPlatform 4 58 60
+      ++ mkPlatform 5 82 84
+      ++ mkPlatform 4 102 104
+      ++ mkPlatform 5 126 128
+      ++ mkPlatform 4 150 152
+      ++ mkPlatform 5 174 176
+      ++ mkPlatform 4 198 200
+
+    flag   = mkFlag 240
+    castle = mkCastle 243
+
+    tiles = ground ++ platforms ++ highPlatforms ++ qBlocks ++ decor ++ flag ++ castle
+
+    enemies =
+         map mkG [20, 45, 70, 95, 120, 145, 170, 195, 220]
+      ++ map mkK [55, 105, 155, 205]
+
+    coins = mkCoins $
+         [(27,9),(28,9),(49,10),(50,10),(73,11),(74,11),(97,9),(98,9)
+        ,(121,10),(122,10),(145,9),(146,9),(169,11),(170,11),(193,9),(194,9)
+        ,(217,10),(218,10)]
 
 --------------------------------------------------------------------------------
 -- World 1-4
