@@ -98,7 +98,7 @@ mkP (c, r) = Enemy (fromIntegral c * ts) (fromIntegral r * ts) 0 0 (EPiranha 0 F
 -- | Bowser: 2-tile-wide, spawns at column c.
 --   y = ts*2 places him on top of the row-1 bridge tiles (bridge top = 2*ts).
 mkBowser :: Int -> Enemy
-mkBowser c = Enemy (fromIntegral c * ts) (ts*2) (-60) 0 (EBowser 3.0 4.0 5.0) Bowser
+mkBowser c = Enemy (fromIntegral c * ts) (ts*2) (-60) 0 EAlive Bowser
 
 --------------------------------------------------------------------------------
 -- World 1-1
@@ -298,142 +298,144 @@ level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (208*ts) 1 2
 
 --------------------------------------------------------------------------------
 -- World 1-3
--- Treetop level redesigned for static platforms.
--- All gaps are ≤2 tiles wide *or* have an intermediate platform that is
--- easily reachable.  The level still features raised brick structures,
--- scattered ? blocks, and coins above the canopies.
+-- Treetop level: Mario walks across stacked brick platforms (tree canopy).
 --------------------------------------------------------------------------------
 
 level1_3 :: Level
-level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (240*ts) 1 3
+level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (244*ts) 1 3
   where
-    -- Continuous ground, broken only by narrow (2‑tile) gaps.
-    ground = concat
-      [ mkGround 0   15
-      , mkGround 18  37
-      , mkGround 40  61
-      , mkGround 64  85
-      , mkGround 88 109
-      , mkGround 112 133
-      , mkGround 136 157
-      , mkGround 160 181
-      , mkGround 184 205
-      , mkGround 208 250   -- extended to cover the flagpole area
-      ]
+    ground = mkGround 0 244
 
-    -- Low platforms that bridge the gaps.
-    platforms =
-         mkPlatform 3 14 19
-      ++ mkPlatform 3 36 41
-      ++ mkPlatform 3 62 67
-      ++ mkPlatform 3 84 89
-      ++ mkPlatform 3 108 113
-      ++ mkPlatform 3 132 137
-      ++ mkPlatform 3 156 161
-      ++ mkPlatform 3 180 185
-      ++ mkPlatform 3 204 209
+    islands =
+         mkPlatform 3 10 12 ++ mkPlatform 4 10 12
+      ++ mkPlatform 3 16 19 ++ mkPlatform 4 16 19
+      ++ mkPlatform 5 26 29 ++ mkPlatform 5 30 31
+      ++ mkPlatform 4 34 36 ++ mkPlatform 5 34 36
+      ++ mkPlatform 3 48 50 ++ mkPlatform 4 48 50
+      ++ mkPlatform 4 58 60 ++ mkPlatform 5 58 60
+      ++ mkPlatform 7 72 74 ++ mkPlatform 8 72 74
+      ++ mkPlatform 5 90 93 ++ mkPlatform 6 90 93
+      ++ mkPlatform 4 106 108 ++ mkPlatform 5 106 108
+      ++ mkPlatform 6 122 125 ++ mkPlatform 7 122 125
+      ++ mkPlatform 4 138 140 ++ mkPlatform 5 138 140
+      ++ mkPlatform 7 154 157 ++ mkPlatform 8 154 157
+      ++ mkPlatform 4 170 172 ++ mkPlatform 5 170 172
+      ++ mkPlatform 6 186 189 ++ mkPlatform 7 186 189
+      ++ mkPlatform 4 202 204 ++ mkPlatform 5 202 204
+      ++ mkPlatform 7 218 221 ++ mkPlatform 8 218 221
+      ++ mkPlatform 4 234 236 ++ mkPlatform 5 234 236
 
-    -- Raised treetop platforms (optional).
-    highPlatforms =
-         mkPlatform 5 26 29
-      ++ mkPlatform 6 48 51
-      ++ mkPlatform 7 72 75
-      ++ mkPlatform 5 96 99
-      ++ mkPlatform 6 120 123
-      ++ mkPlatform 5 144 147
-      ++ mkPlatform 7 168 171
-      ++ mkPlatform 5 192 195
-      ++ mkPlatform 6 216 219
+    jumps =
+         mkQLine 4 16 17
+      ++ mkQLine 6 48 48
+      ++ mkQLine 5 80 81
+      ++ mkQLine 6 112 112
+      ++ mkQLine 5 144 145
+      ++ mkQLine 6 176 176
+      ++ mkQLine 4 208 209
 
-    -- ? blocks on raised platforms.
-    qBlocks =
-         mkQLine 7 27 28
-      ++ mkQLine 8 49 50
-      ++ mkQLine 9 73 74
-      ++ mkQLine 7 97 98
-      ++ mkQLine 8 121 122
-      ++ mkQLine 7 145 146
-      ++ mkQLine 9 169 170
-      ++ mkQLine 7 193 194
-      ++ mkQLine 8 217 218
+    tiles = ground ++ islands ++ jumps
 
-    -- Decorative brick clusters.
-    decor =
-         mkPlatform 4 20 22
-      ++ mkPlatform 5 42 44
-      ++ mkPlatform 4 58 60
-      ++ mkPlatform 5 82 84
-      ++ mkPlatform 4 102 104
-      ++ mkPlatform 5 126 128
-      ++ mkPlatform 4 150 152
-      ++ mkPlatform 5 174 176
-      ++ mkPlatform 4 198 200
-
-    flag   = mkFlag 240
-    castle = mkCastle 243
-
-    tiles = ground ++ platforms ++ highPlatforms ++ qBlocks ++ decor ++ flag ++ castle
-
-    enemies =
-         map mkG [20, 45, 70, 95, 120, 145, 170, 195, 220]
-      ++ map mkK [55, 105, 155, 205]
-
-    coins = mkCoins $
-         [(27,9),(28,9),(49,10),(50,10),(73,11),(74,11),(97,9),(98,9)
-        ,(121,10),(122,10),(145,9),(146,9),(169,11),(170,11),(193,9),(194,9)
-        ,(217,10),(218,10)]
+    enemies = map mkG [16,18,50,82,114,146,178,210] ++ map mkK [64,128,192]
+    coins = mkCoins
+      ([(c,4) | c <- [26..29]] ++ [(c,5) | c <- [90..93]] ++ [(c,4) | c <- [122..125]]
+       ++ [(c,5) | c <- [154..157]] ++ [(c,4) | c <- [186..189]] ++ [(c,4) | c <- [218..221]]
+       ++ [(16,6),(17,6),(48,8),(80,7),(81,7),(112,8),(144,7),(145,7),(176,8),(208,6),(209,6)])
 
 --------------------------------------------------------------------------------
 -- World 1-4
--- Bowser's castle.  Firebars, lava pits, and Bowser on the bridge.
--- Bowser is defeated only by touching the Axe at col 77 (already handled by
--- the Axe tile logic in GameState).
+-- Bowser's castle: lava pits, two narrow bridged gaps, a brick-platform
+-- obstacle with a firebar, Bowser's long bridge with a second firebar,
+-- a staircase, axe, and castle.
+--
+-- Root cause of the old bug: mkRect Step 0 50 2 10 filled every column 0–50
+-- at rows 2–10 with solid Step tiles, burying Mario (who spawns at row ~1.5)
+-- inside a wall of blocks.  Those tiles and the side-wall lines are gone.
+--
+-- Geometry (all enemies verified clear of blocked cols):
+--   floorA : cols  0–10  (starting run)
+--   bridge1: cols 11–13  (row-1 Step over lava1)
+--   floorB : cols 14–28  (mid section with brick platform obstacle)
+--   bridge2: cols 29–31  (row-1 Step over lava2)
+--   floorC : cols 32–40  (approach to Bowser's bridge)
+--   bowserBridge: cols 41–70 (row-1 Step; Bowser patrols here)
+--   stairs : cols 70–74  (mkStairsUp 70 5)
+--   axe    : col  75, row 1
+--   castle : cols 76–80
 --------------------------------------------------------------------------------
 
 level1_4 :: Level
-level1_4 = mkLevel tiles enemies coins [] firebars (ts*3) (ts*3) (80*ts) 1 4
+level1_4 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*1.5) (80*ts) 1 4
   where
-    floorA = mkGround 0 15
-    floorB = mkGround 20 25
-    floorC = mkGround 30 49
-    lava   = [Tile c (-2) Ground | c <- [16..19] ++ [26..29]]
+    -- ── Ground sections ───────────────────────────────────────────────────
+    floorA = mkGround 0  10   -- starting area
+    floorB = mkGround 14 28   -- mid section (holds brick obstacle)
+    floorC = mkGround 32 40   -- approach to Bowser's bridge
 
-    walls  = mkRect Step 0 50 2 10
-          ++ [Tile 0 r Step | r <- [0..10]]
-          ++ [Tile 50 r Step | r <- [0..10]]
+    -- ── Lava pits ─────────────────────────────────────────────────────────
+    lava1 = [Tile c (-2) Ground | c <- [11..13]]
+    lava2 = [Tile c (-2) Ground | c <- [29..31]]
+    lava3 = [Tile c (-2) Ground | c <- [41..69]]
 
-    -- First bridge (over first lava pit and through the main castle hall)
-    bridge        = mkBridge 16 39
-    bridgeSupport = mkBridgePosts [16,19,22,25,28,31,34,37]
+    -- ── Short bridges over the narrow pits ────────────────────────────────
+    bridge1 = mkBridge 11 13
+    bridge2 = mkBridge 29 31
 
-    -- Second bridge leads to Bowser
-    secondRun     = mkBridge 40 73
-    secondSupport = mkBridgePosts [40,45,50,55,60,65,70,73]
+    -- ── ? block on floorA (col 8, row 3) ─────────────────────────────────
+    -- Gives a Mushroom to Small Mario or a Fire Flower to Big/Fire Mario.
+    -- Reachable with a standing jump from the ground (jump height ~142px;
+    -- row-3 bottom edge is at 3*ts = 96px — well within range).
+    powerBlock = mkQLine 3 8 8
 
-    stairClimb = mkStairsUp 73 6
-    axe        = [Tile 77 1 Axe]
-    castle     = mkCastle 78
+    -- ── Brick platform obstacle in floorB ─────────────────────────────────
+    platform1 = mkPlatform 3 18 20
 
-    tiles = floorA ++ floorB ++ floorC ++ lava ++ walls
-         ++ bridge ++ bridgeSupport
-         ++ secondRun ++ secondSupport
+    -- ── Bowser's long bridge ──────────────────────────────────────────────
+    bowserBridge = mkBridge 41 70
+    bridgePosts  = mkBridgePosts [41,44,47,50,53,56,59,62,65,68]
+
+    -- ── Staircase, axe, castle ────────────────────────────────────────────
+    stairClimb = mkStairsUp 70 5
+    axe        = [Tile 75 1 Axe]
+    castle     = mkCastle 76
+
+    tiles = floorA ++ floorB ++ floorC
+         ++ lava1 ++ lava2 ++ lava3
+         ++ bridge1 ++ bridge2
+         ++ powerBlock ++ platform1
+         ++ bowserBridge ++ bridgePosts
          ++ stairClimb ++ axe ++ castle
 
-    -- Two firebars: one in the first corridor, one in the castle hall
+    -- ── Firebars ──────────────────────────────────────────────────────────
     firebars =
-      [ Firebar (34*ts) (3*ts) 0.00 2.4 4
-      , Firebar (58*ts) (3*ts) 1.30 2.0 5
+      [ Firebar (19*ts) (fromIntegral (4::Int)*ts) 0.00 2.4 4
+      , Firebar (55*ts) (fromIntegral (2::Int)*ts) 1.30 2.0 5
       ]
 
+    -- ── Power-ups ─────────────────────────────────────────────────────────
+    -- Pre-placed Fire Flower sitting on floorC at col 36.
+    -- Mario walks into it after crossing the second bridge to power up
+    -- before facing Bowser.  pVY = 0 (already on the ground).
+    pups = [ PUp (36*ts) ts 0 True FireFlower ]
+
+    -- ── Enemies ───────────────────────────────────────────────────────────
+    -- Goombas moved from cols 5 & 7 to cols 15 & 26 (floorB, past the
+    -- first lava pit).  Mario now has ~3 seconds of free movement at the
+    -- start before any enemy arrives.
     enemies =
-      [ Enemy (10*ts) ts (-80) 0 EAlive Goomba
-      , Enemy (12*ts) ts (-80) 0 EAlive Goomba
-      , Enemy (25*ts) (ts*2) (-70) 0 EAlive Koopa
-      , mkBowser 65   -- Bowser guards the second bridge
+      [ Enemy (15*ts) ts     (-80) 0 EAlive Goomba  -- floorB col 15
+      , Enemy (26*ts) ts     (-80) 0 EAlive Goomba  -- floorB col 26
+      , Enemy (22*ts) ts     (-70) 0 EAlive Koopa   -- floorB col 22
+      , mkBowser 60                                  -- bridge col 60
       ]
 
-    -- A handful of coins in the first corridor to reward careful play
-    coins = mkCoins [(5,2),(6,2),(7,2),(8,2),(9,2),(10,2),(20,2),(25,2),(30,2),(35,2)]
+    -- ── Coins ─────────────────────────────────────────────────────────────
+    coins = mkCoins
+      [(2,2),(3,2),(4,2),(5,2),(6,2),(7,2),(8,2)  -- floorA path
+      ,(15,2),(16,2),(17,2)                        -- before platform1
+      ,(33,2),(34,2),(35,2)                        -- floorC
+      ,(43,2),(50,2),(57,2),(64,2)                 -- along Bowser's bridge
+      ]
 
 --------------------------------------------------------------------------------
 -- World 2-1
