@@ -104,25 +104,8 @@ step dt gs
                                   else (False, gFireballs gs)
     m5 = if didShoot then m4 { mFireCool = 0.4 } else m4
 
-    -- Bowser fire: spawn when his fireTimer just reset (crossed 0).
-    bowserFire = concatMap spawnBowserFire (zip (gEnem gs) es2)
-    spawnBowserFire (prev, curr)
-      | eType curr /= Bowser = []
-      | otherwise = case (eState prev, eState curr) of
-          (EBowser prevFt _ _, EBowser newFt _ _)
-            | prevFt > 0 && newFt >= 3.0 - dt ->
-                let dir = if eVX curr <= 0 then -1 else 1 :: Float
-                in [ Fireball { fiX     = eX curr + (if dir < 0 then 0 else ts*2)
-                              , fiY     = eY curr + ts * 1.2
-                              , fiVX    = 168 * dir   -- 280 * 0.6 = 40% slower
-                              , fiVY    = 0
-                              , fiAlive = True
-                              , fiBowser = True } ]
-            | otherwise -> []
-          _ -> []
-
     -- Step existing fireballs (physics + wall kill)
-    fb2 = map (stepFireball dt sol) (fb1 ++ bowserFire)
+    fb2 = map (stepFireball dt sol) fb1
 
     -- Fireball vs enemy collisions
     (fb3, es4, sc5) = fireballsVsEnemies fb2 es3 sc4
@@ -149,10 +132,11 @@ step dt gs
     (m7, ph) = deathCheck m6 livesAfter sx sy
 
     -- ── End conditions ───────────────────────────────────────────────────
-    endX       = lEndX currentLevel
-    touchedAxe = any (\t -> tType t == Axe && hit (mBB m7) (tBB t)) (gTiles gs)
+    endX        = lEndX currentLevel
+    touchedAxe  = any (\t -> tType t == Axe && hit (mBB m7) (tBB t)) (gTiles gs)
+    bowserDead  = any (\e -> eType e == Bowser && case eState e of { EDead _ -> True; _ -> False }) es4
 
-    ph2 | touchedAxe                  = Win
+    ph2 | touchedAxe || bowserDead = Win
         | ph == Over                  = Over
         | ph == Play && mX m7 >= endX = LevelComplete
         | otherwise                   = ph
@@ -219,16 +203,14 @@ handleEv ev gs = case ev of
   EventKey k Up   _ _ -> gs { gKeys  = setK k False (gKeys gs) }
   _ -> gs
   where
-    setK (Char 'a')             v k = k { kL   = v }
-    setK (Char 'd')             v k = k { kR   = v }
-    setK (SpecialKey KeyLeft)   v k = k { kL   = v }
-    setK (SpecialKey KeyRight)  v k = k { kR   = v }
-    setK (SpecialKey KeySpace)  v k = k { kJ   = v }
-    setK (SpecialKey KeyUp)     v k = k { kJ   = v }
-    setK (Char 'z')             v k = k { kRun = v }
-    setK (Char 'x')             v k = k { kRun = v }
-    setK (SpecialKey KeyDown)   v k = k { kD   = v }
-    setK (Char 's')             v k = k { kD   = v }
+    setK (Char 'a')            v k = k { kL   = v }
+    setK (Char 'd')            v k = k { kR   = v }
+    setK (SpecialKey KeyLeft)  v k = k { kL   = v }
+    setK (SpecialKey KeyRight) v k = k { kR   = v }
+    setK (SpecialKey KeySpace) v k = k { kJ   = v }
+    setK (SpecialKey KeyUp)    v k = k { kJ   = v }
+    setK (Char 'z')            v k = k { kRun = v }
+    setK (Char 'x')            v k = k { kRun = v }
     setK _ _ k = k
 
     tryJump' (SpecialKey KeySpace) m = tryJump m

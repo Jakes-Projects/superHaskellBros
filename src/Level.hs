@@ -423,11 +423,7 @@ level1_4 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*1.5) (80*ts) 1 4
     -- first lava pit).  Mario now has ~3 seconds of free movement at the
     -- start before any enemy arrives.
     enemies =
-      [ Enemy (15*ts) ts     (-80) 0 EAlive Goomba  -- floorB col 15
-      , Enemy (26*ts) ts     (-80) 0 EAlive Goomba  -- floorB col 26
-      , Enemy (22*ts) ts     (-70) 0 EAlive Koopa   -- floorB col 22
-      , mkBowser 60                                  -- bridge col 60
-      ]
+      [ mkBowser 60 ]   -- only Bowser; this is a boss level
 
     -- ── Coins ─────────────────────────────────────────────────────────────
     coins = mkCoins

@@ -41,10 +41,10 @@ spawnFireball m fbs
     dir   = fromIntegral (mFace m) :: Float
     -- Spawn at Mario's chest height, offset slightly in facing direction
     newFb = Fireball
-              { fiX    = mX m + dir * ts * 0.5
-              , fiY    = mY m + ts * 0.1
-              , fiVX   = fireballSpeedX * dir
-              , fiVY   = 0
+              { fiX     = mX m + dir * ts * 0.5
+              , fiY     = mY m + ts * 0.1
+              , fiVX    = fireballSpeedX * dir
+              , fiVY    = 0
               , fiAlive = True
               , fiBowser = False
               }
@@ -56,7 +56,6 @@ spawnFireball m fbs
 stepFireball :: Float -> [Tile] -> Fireball -> Fireball
 stepFireball dt sol fb
   | not (fiAlive fb) = fb
-  | fiBowser fb      = stepBowserFire dt sol fb
   | otherwise        = fb { fiX = x', fiY = y', fiVY = vy', fiAlive = alive' }
   where
     solidTiles = filter (solid . tType) sol
@@ -95,22 +94,14 @@ stepFireball dt sol fb
             | otherwise = vy0
     alive' = not wallHit && not offScreen
 
--- Bowser fire travels straight horizontally; destroyed on any solid contact.
-stepBowserFire :: Float -> [Tile] -> Fireball -> Fireball
-stepBowserFire dt sol fb = fb { fiX = x', fiAlive = alive' }
-  where
-    solidTiles = filter (solid . tType) sol
-    x1     = fiX fb + fiVX fb * dt
-    tileHit = any (hit (x1, fiY fb, fireballHalf*2, fireballHalf*2) . tBB) solidTiles
-    offSc  = fiX fb < -200 || fiX fb > 10000
-    x'     = if tileHit then fiX fb else x1
-    alive' = not tileHit && not offSc
-
 -- ─── Enemy collision ─────────────────────────────────────────────────────────
 
 -- | Check every active fireball against every vulnerable enemy.
 --   Returns (updated fireballs, updated enemies, score delta).
---   Bowser is immune — only the axe kills him.
+--   Bowser can be defeated by fireballs (5 fireballs in the original;
+--   here each fireball hit kills him, consistent with the axe being
+--   a one-hit mechanic too).  Either killing Bowser or touching the
+--   axe triggers Win in GameState.
 fireballsVsEnemies :: [Fireball] -> [Enemy] -> Int
                    -> ([Fireball], [Enemy], Int)
 fireballsVsEnemies fbs es sc = (fbs', es', sc')
@@ -136,9 +127,8 @@ checkVsEnemies fb = foldr go (False, [], 0)
       | otherwise               = (True,   killEnemy e : accEs, pts + 200)
 
     isImmune e = case (eType e, eState e) of
-      (Bowser, _)          -> True   -- only the axe kills Bowser
-      (_, EDead _)         -> True   -- already dead
-      (Piranha, EPiranha _ False) -> True  -- retracted Piranha can't be hit
-      _                    -> False
+      (_, EDead _)                -> True   -- already dead
+      (Piranha, EPiranha _ False) -> True   -- retracted Piranha can't be hit
+      _                           -> False  -- everything else (incl. Bowser) is vulnerable
 
     killEnemy e = e { eState = EDead 0.5 }
