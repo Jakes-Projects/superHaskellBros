@@ -30,7 +30,7 @@ data Enemy = Enemy
 data PUpType = Mushroom | FireFlower | Star deriving (Eq, Show)
 
 data PUp = PUp
-  { pX, pY, pVY :: Float
+  { pX, pY, pVX, pVY :: Float
   , pAlive :: Bool
   , pType  :: PUpType
   } deriving Show

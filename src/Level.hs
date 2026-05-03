@@ -186,12 +186,11 @@ level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (198*ts) 1 1
     tiles = ground ++ blocks ++ pipes ++ stairs ++ finish ++ flag ++ castle
 
     enemies =
-      -- Goombas placed on clear ground, away from pipes (28,38,46,57,163) and
-      -- the new staircase positions (134-158) and final staircase (181-189).
-         map mkG [22, 37, 40, 55, 59, 80, 82, 100, 102, 110, 116, 144, 160]
-      -- Koopas: col 60 (after pipe pair), col 92 (gap between clusters),
-      -- col 130 (gap between the two staircase pairs 134 and 148)
-      ++ map mkK [60, 92, 130]
+      -- Goombas placed on clear ground, away from pipes (28,38,46,57,163,179)
+      -- Each pair is spaced at least 4 cols apart so they don't immediately collide.
+         map mkG [22, 35, 42, 53, 62, 78, 84, 100, 106, 110, 116, 144, 160]
+      -- Koopas in wider open stretches
+      ++ map mkK [64, 92, 130]
       -- Piranhas in each pipe: heights are pipe_height - 1 (row inside pipe top)
       ++ map mkP [(28,1),(38,2),(46,3),(57,3),(163,1)]
 
@@ -364,7 +363,7 @@ level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (244*ts) 1 3
 
     tiles = ground ++ islands ++ jumps
 
-    enemies = map mkG [16,18,50,82,114,146,178,210] ++ map mkK [64,128,192]
+    enemies = map mkG [14,20,50,82,114,146,178,210] ++ map mkK [64,128,192]
     coins = mkCoins
       ([(c,4) | c <- [26..29]] ++ [(c,5) | c <- [90..93]] ++ [(c,4) | c <- [122..125]]
        ++ [(c,5) | c <- [154..157]] ++ [(c,4) | c <- [186..189]] ++ [(c,4) | c <- [218..221]]
@@ -444,7 +443,7 @@ level1_4 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*1.5) (80*ts) 1 4
     -- Pre-placed Fire Flower sitting on floorC at col 36.
     -- Mario walks into it after crossing the second bridge to power up
     -- before facing Bowser.  pVY = 0 (already on the ground).
-    pups = [ PUp (36*ts) ts 0 True FireFlower ]
+    pups = [ PUp (36*ts) ts 0 0 True FireFlower ]
 
     -- ── Enemies ───────────────────────────────────────────────────────────
     -- Goombas moved from cols 5 & 7 to cols 15 & 26 (floorB, past the
@@ -514,7 +513,7 @@ level2_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 2 1
     tiles = ground ++ blocks ++ pipes ++ stairs ++ finish ++ flag ++ castle
 
     enemies =
-         map mkG [10,28,45,62,80,97,112,126,140,155,170,183,193]
+         map mkG [10,25,43,65,80,97,112,126,140,153,170,183,193]
       ++ map mkK [35,60,86,106,118,158]
       ++ map mkP [(40,2),(70,3),(165,2)]
 
@@ -588,7 +587,7 @@ level2_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (208*ts) 2 2
          ++ surfaceExit ++ finish ++ flag ++ castle
 
     enemies =
-         map mkG [35,56,70,85,100,118,130,148,175,195]
+         map mkG [35,56,70,85,100,118,130,148,175,197]
       ++ map mkK [48,78,110,140]
       ++ [ mkP (185,1), mkP (189,1) ]
 
@@ -650,8 +649,8 @@ level2_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (213*ts) 2 3
          ++ qBlocks ++ pipes ++ finish ++ flag ++ castle
 
     enemies =
-         map mkG [8,25,45,68,90,106,122,145,165,182,200]
-      ++ map mkK [32,55,85,118,150,170,195]
+         map mkG [8,25,45,68,90,106,122,145,162,182,200]
+      ++ map mkK [32,52,85,118,150,170,195]
       ++ map mkP [(16,1),(57,1),(110,2),(175,1)]
 
     coins = mkCoins $

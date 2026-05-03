@@ -1,4 +1,4 @@
-module Enemy (stepEnemy, collideEnemies, handleShellEnemyCollisions) where
+module Enemy (stepEnemy, collideEnemies, handleShellEnemyCollisions, handleEnemyEnemyCollisions) where
 
 import Constants (ts, grav)
 import Types
@@ -14,7 +14,7 @@ stepEnemy dt sol mario e = case eState e of
   EShell timer moving ->
     let t' = timer - dt
         e' = if moving then stepShellMoving dt sol e else stepShellStationary dt sol e
-    in if t' <= 0
+    in if t' <= 0 && not moving
        then e' { eState = EAlive, eVX = -70, eVY = 0 }
        else e' { eState = EShell t' moving }
   EPiranha timer up ->
@@ -138,6 +138,34 @@ handleShellEnemyCollisions es = map killIfCollided es
       EShell _ True -> hit (eBB shell) (eBB victim)
       _ -> False
 
+-- | Bounce alive enemies off each other by reversing the velocity of whichever
+--   enemy is moving toward the other. Only one needs to turn — the other will
+--   naturally separate on the next frame.
+handleEnemyEnemyCollisions :: [Enemy] -> [Enemy]
+handleEnemyEnemyCollisions es = map bounce es
+  where
+    bounce e
+      | not (isWalking e) = e
+      | any (movingToward e) es = e { eVX = -(eVX e) }
+      | otherwise = e
+
+    -- True if 'other' is a walking enemy overlapping 'e' and 'e' is heading toward it
+    movingToward e other =
+      not (eX e == eX other && eY e == eY other)
+      && isWalking other
+      && hit (eBB e) (eBB other)
+      && movingCloser e other
+
+    -- Is e moving in the direction of other?
+    movingCloser e other
+      | eX e < eX other = eVX e > 0   -- other is to the right, e moving right
+      | otherwise       = eVX e < 0   -- other is to the left,  e moving left
+
+    isWalking e = case eState e of
+      EAlive        -> True
+      EBowser _ _ _ -> True
+      _             -> False
+
 marioHalfHeight :: Mario -> Float
 marioHalfHeight m = if mState m == Big || mState m == Fire then ts else ts/2
 
@@ -155,35 +183,35 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
       _       -> False
 
     handleCollision mario e acc s
-      -- Stomp: Mario falling onto enemy from above.
+      -- Stomp: Mario must be falling (mVY < 0) and above the enemy's centre.
       -- Bowser is immune to stomps — only the axe kills him.
-      | mY mario > eY e + ts*0.55 && mVY mario < 50 =
-          let bounce     = bounceVel jumpHeld
+      | mY mario > eY e + ts*0.55 && mVY mario < 0 =
+          let bounce      = bounceVel jumpHeld
               marioBounce = mario { mY  = eY e + ts*0.55 + marioHalfHeight mario
                                   , mVY = bounce }
           in case eType e of
             Bowser  -> hurtMario mario e acc s   -- stomp does nothing to Bowser
-            Goomba  -> ( marioBounce { mInv = 0.3 }
+            Goomba  -> ( marioBounce
                        , e { eState = EDead 0.5 } : acc, s + 100 )
             Koopa   -> case eState e of
               EAlive ->
-                ( marioBounce { mInv = 0.5 }
-                , e { eState = EShell 15.0 False } : acc, s + 100 )
+                ( marioBounce { mInv = 0.3 }
+                , e { eState = EShell 5.0 False } : acc, s + 100 )
               EShell _ False ->
                 ( marioBounce { mInv = 0.05 }, e:acc, s )
               EShell _ True ->
-                ( marioBounce { mInv = 0.5 }
-                , e { eState = EShell 15.0 False } : acc, s + 100 )
+                ( marioBounce { mInv = 0.3 }
+                , e { eState = EShell 5.0 False } : acc, s + 100 )
               _ -> (mario, e:acc, s)
             Piranha -> hurtMario mario e acc s
 
-      -- Kick stationary shell
+      -- Kick stationary shell: Mario must be moving toward it (not just touching)
       | eType e == Koopa && isStationaryShell e =
-          if mInv mario <= 0.05
+          if mInv mario <= 0
             then let dir       = if mX mario < eX e then 1 else -1
                      kickSpeed = 600 * fromIntegral dir
                      shellX    = eX e + fromIntegral dir * 40
-                     kicked    = e { eState = EShell 15.0 True
+                     kicked    = e { eState = EShell 5.0 True
                                    , eX = shellX, eVX = kickSpeed, eVY = 150 }
                      mario'    = mario { mX     = mX mario + fromIntegral (-dir) * 40
                                        , mVY    = 180

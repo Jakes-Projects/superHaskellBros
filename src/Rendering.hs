@@ -219,7 +219,7 @@ drawMario spr m
         $ scale (marioScale * fromIntegral (mFace m)) marioScale
         $ pickMarioFrame spr m
   where
-    blink  = mInv m > 0 && even (floor (mInv m * 10) :: Int)
+    blink  = mInv m > 1.0 && even (floor (mInv m * 10) :: Int)
     -- When crouching, Big/Fire Mario's BB shrinks to small height (ts instead of ts*2).
     -- The physics center mY stays put, so the sprite floats ts/2 above the ground.
     -- Shift the sprite down by ts/2 to keep the feet at the correct world position.
@@ -229,40 +229,34 @@ pickMarioFrame :: Sprites -> Mario -> Picture
 pickMarioFrame spr m =
   let airborne = not (mGround m)
       wFrame   = (floor (mAnim m * 10) :: Int) `mod` 3
-      skidding = (mFace m == 1    && mVX m < -10)
-              || (mFace m == (-1) && mVX m >  10)
       still    = abs (mVX m) < 5 && mGround m
       crouching = mCrouch m
   in case mState m of
-       Big   -> pickBigFrame   spr airborne skidding still crouching wFrame
-       Fire  -> pickFireFrame  spr airborne skidding still crouching wFrame
-       _     -> pickSmallFrame spr airborne skidding still wFrame
+       Big   -> pickBigFrame   spr airborne still crouching wFrame
+       Fire  -> pickFireFrame  spr airborne still crouching wFrame
+       _     -> pickSmallFrame spr airborne still wFrame
 
--- Small Mario has no crouch sprite — crouch only applies to Big/Fire
-pickSmallFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
-pickSmallFrame spr airborne skidding still wFrame
+pickSmallFrame :: Sprites -> Bool -> Bool -> Int -> Picture
+pickSmallFrame spr airborne still wFrame
   | airborne  = spMarioJump  spr
-  | skidding  = spMarioSkid  spr
   | still     = spMarioStand spr
   | wFrame == 0 = spMarioRun1 spr
   | wFrame == 1 = spMarioRun2 spr
   | otherwise   = spMarioRun3 spr
 
-pickBigFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
-pickBigFrame spr airborne skidding still crouching wFrame
+pickBigFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
+pickBigFrame spr airborne still crouching wFrame
   | crouching   = spBigCrouch spr
   | airborne    = spBigJump   spr
-  | skidding    = spBigSkid   spr
   | still       = spBigStand  spr
   | wFrame == 0 = spBigRun1   spr
   | wFrame == 1 = spBigRun2   spr
   | otherwise   = spBigRun3   spr
 
-pickFireFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
-pickFireFrame spr airborne skidding still crouching wFrame
+pickFireFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
+pickFireFrame spr airborne still crouching wFrame
   | crouching   = spFireCrouch spr
   | airborne    = spFireJump   spr
-  | skidding    = spFireSkid   spr
   | still       = spFireStand  spr
   | wFrame == 0 = spFireRun1   spr
   | wFrame == 1 = spFireRun2   spr
@@ -276,7 +270,7 @@ drawEnem spr clock = pictures . map (drawE spr clock)
 drawE :: Sprites -> Float -> Enemy -> Picture
 drawE spr clock e = case eState e of
   EDead _         -> translate cx (eY e + 5)          (spGoombaCrushed spr)
-  EShell _ moving -> translate cx (eY e + spriteHalf) (shellPic moving)
+  EShell timer moving -> translate cx (eY e + spriteHalf) (shellPic timer moving)
   EBowser _ _ _   -> translate cx (eY e + spriteHalf) (drawEnemyBody spr clock e)
   _               ->
     if shouldDrawAlive (eState e)
@@ -286,9 +280,10 @@ drawE spr clock e = case eState e of
     cx = eX e + ts/2
     spriteHalf = 24
 
-    shellPic moving
-      | moving    = spKoopaResetting spr
-      | otherwise = spKoopaShell spr
+    shellPic timer moving
+      | moving           = spKoopaShell     spr
+      | timer <= 2.0     = spKoopaResetting spr
+      | otherwise        = spKoopaShell     spr
 
     shouldDrawAlive st = case st of
       EAlive        -> True

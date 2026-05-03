@@ -5,7 +5,7 @@ import Constants (sW, grav, ts)
 import Types
 import Physics (solid, physicsMario, mBB, hit, tBB)
 import Mario (inputMario, tryJump, deathCheck)
-import Enemy (stepEnemy, collideEnemies, handleShellEnemyCollisions)
+import Enemy (stepEnemy, collideEnemies, handleShellEnemyCollisions, handleEnemyEnemyCollisions)
 import PowerUp (bumpBlocks, stepPup, grabPups, pickCoins, stepBrickAnims)
 import Fireball (spawnFireball, stepFireball, fireballsVsEnemies)
 import Level (allLevels, initMarioFromLevel)
@@ -80,7 +80,8 @@ step dt gs
     -- ── Enemies ──────────────────────────────────────────────────────────
     es1  = map (stepEnemy dt sol m2) (gEnem gs)
     es1' = handleShellEnemyCollisions es1
-    es2  = filter (\e -> case eState e of { EDead t -> t > 0; _ -> True }) es1'
+    es1'' = handleEnemyEnemyCollisions es1'
+    es2  = filter (\e -> case eState e of { EDead t -> t > 0; _ -> True }) es1''
 
     (m3, es3, sc1) = collideEnemies m2 es2 (gScore gs) (kJ ks)
 
@@ -118,14 +119,35 @@ step dt gs
     -- Remove dead fireballs (keep alive ones only)
     fb4 = filter fiAlive fb3
 
+    -- ── Firebar collision ────────────────────────────────────────────────
+    -- Check each segment of every firebar against Mario's bounding box.
+    -- Uses the same position math as Rendering.drawFirebar.
+    firebarSegBBs = [ (fbX fb + dx, fbY fb + dy, ts * 0.4, ts * 0.4)
+                    | fb <- gFirebars gs
+                    , i  <- [0 .. fbLength fb - 1]
+                    , let spacing = ts * 0.8
+                          angle   = fbAngle fb
+                          dx = spacing * fromIntegral i * cos angle
+                          dy = spacing * fromIntegral i * sin angle
+                    ]
+    touchesFirebar = mState m5 /= MDead
+                  && mInv m5 <= 0
+                  && any (hit (mBB m5)) firebarSegBBs
+
+    -- Power-down chain: Fire → Big → Small → MDead (same as hurtMario in Enemy.hs)
+    m5' | not touchesFirebar = m5
+        | mState m5 == Fire  = m5 { mState = Big,   mInv = 2.0 }
+        | mState m5 == Big   = m5 { mState = Small, mInv = 2.0 }
+        | otherwise          = m5 { mState = MDead, mVY = 500, mVX = 0 }
+
     -- ── Lava / timer death ───────────────────────────────────────────────
-    onLava    = any (\t -> tRow t == (-2) && hit (mBB m5) (tBB t)) (gTiles gs)
+    onLava    = any (\t -> tRow t == (-2) && hit (mBB m5') (tBB t)) (gTiles gs)
     timerDead = gTimer gs > 0 && (gTimer gs - dt) <= 0
 
     -- Guard: only trigger on a living Mario (prevents mVY reset bounce loop)
-    m6 | mState m5 /= MDead && (onLava || timerDead) =
-             m5 { mState = MDead, mVY = 500, mVX = 0 }
-       | otherwise = m5
+    m6 | mState m5' /= MDead && (onLava || timerDead) =
+             m5' { mState = MDead, mVY = 500, mVX = 0 }
+       | otherwise = m5'
 
     -- ── Death / lives ────────────────────────────────────────────────────
     sx = lStartX currentLevel

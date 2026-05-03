@@ -35,7 +35,8 @@ bumpBlocks m vy tls pus sc
                QPowerUp ->
                  -- Small Mario gets Mushroom; Big/Fire gets Fire Flower
                  let pType = if mState m == Small then Mushroom else FireFlower
-                     pu0   = PUp bx by 120 True pType
+                     initVX = if pType == FireFlower then 0 else 80
+                     pu0   = PUp bx by initVX 120 True pType
                  in (tls2, pu0:pus, sc + 50, [bump], False)
         Brick | mState m == Big || mState m == Fire ->
           let tls2  = filter (\x -> not (samePos x t)) tls
@@ -62,21 +63,20 @@ stepBrickAnims dt = filter alive . map step
     alive (CoinPopAnim _ _ _ t)  = t > 0
 
 -- | Advance a power-up one frame.
---   Mushrooms slide to the right; Fire Flowers stay put (no horizontal velocity).
+--   Mushrooms slide horizontally and bounce off walls; Fire Flowers stay put.
 stepPup :: Float -> [Tile] -> PUp -> PUp
 stepPup dt sol p
   | not (pAlive p) = p
-  | otherwise = p { pX = x', pY = y', pVY = vy' }
+  | otherwise = p { pX = x', pY = y', pVX = vx', pVY = vy' }
   where
-    hspd = case pType p of
-             Mushroom   -> 80   -- slides rightward like the original
-             FireFlower -> 0    -- stays on top of the block
-             Star       -> 120  -- bouncy, handled same as mushroom for now
-    x0  = pX p + hspd * dt
+    x0  = pX p + pVX p * dt
     y0  = pY p + pVY p * dt
     vy0 = pVY p + grav * dt
-    onG = any (hit (x0 + ts/2, y0, ts*0.8, ts*0.8) . tBB) sol
-    x'  = x0
+    -- Reverse horizontal direction on wall contact
+    wallHit = any (hit (x0 + ts/2, pY p, ts*0.8, ts*0.8) . tBB) sol
+    onG     = any (hit (x0 + ts/2, y0,   ts*0.8, ts*0.8) . tBB) sol
+    x'  = if wallHit then pX p else x0
+    vx' = if wallHit then -(pVX p) else pVX p
     y'  = if onG then pY p else y0
     vy' = if onG then 0    else vy0
 
