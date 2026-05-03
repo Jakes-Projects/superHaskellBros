@@ -6,7 +6,7 @@ import Types
 import Physics (solid, physicsMario, mBB, hit, tBB)
 import Mario (inputMario, tryJump, deathCheck)
 import Enemy (stepEnemy, collideEnemies, handleShellEnemyCollisions)
-import PowerUp (bumpBlocks, stepPup, grabPups, pickCoins)
+import PowerUp (bumpBlocks, stepPup, grabPups, pickCoins, stepBrickAnims)
 import Fireball (spawnFireball, stepFireball, fireballsVsEnemies)
 import Level (allLevels, initMarioFromLevel)
 
@@ -29,6 +29,7 @@ initGS =
         , gFireballs  = []
         , gTimer      = 400
         , gCoinCount  = 0
+        , gBrickAnims = []
         }
 
 loadLevel :: Int -> GS -> GS
@@ -46,6 +47,7 @@ loadLevel idx gs
             , gPhase     = Play
             , gLevelIdx  = idx
             , gTimer     = 400
+            , gBrickAnims = []
             }
   | otherwise = gs
 
@@ -84,9 +86,12 @@ step dt gs
 
     -- ── Collectibles ─────────────────────────────────────────────────────
     (cs,  sc2)       = pickCoins (mBB m3) (gCoins gs) sc1
-    (ts2, pu1, sc3)  = bumpBlocks m3 (mVY m0) (gTiles gs) (gPups gs) sc2
-    pu2              = map (stepPup dt (filter (solid . tType) ts2)) pu1
-    (m4, pu3, sc4)   = grabPups m3 pu2 sc3
+    (ts2, pu1, sc3, newAnims, brickBroke) = bumpBlocks m3 (mVY m0) (gTiles gs) (gPups gs) sc2
+    -- When Big/Fire Mario breaks a brick, kill upward velocity so he bounces back down
+    -- (same ceiling-hit behaviour the physics engine applies to unbreakable blocks)
+    m3' = if brickBroke then m3 { mVY = -50 } else m3
+    pu2 = map (stepPup dt (filter (solid . tType) ts2)) pu1
+    (m4, pu3, sc4) = grabPups m3' pu2 sc3
 
     -- ── Coin counter & 1-up ──────────────────────────────────────────────
     prevCollected  = length (filter (\(_,_,c) -> c) (gCoins gs))
@@ -141,8 +146,10 @@ step dt gs
         | ph == Play && mX m7 >= endX = LevelComplete
         | otherwise                   = ph
 
-    fb_stepped = map (stepFirebar dt) (gFirebars gs)
-    newTimer   = max 0 (gTimer gs - dt)
+    fb_stepped   = map (stepFirebar dt) (gFirebars gs)
+    newTimer     = max 0 (gTimer gs - dt)
+    -- Step brick/block animations, adding any new ones from this frame
+    brickAnims'  = stepBrickAnims dt (gBrickAnims gs ++ newAnims)
 
     -- ── Respawn reset ────────────────────────────────────────────────────
     respawning    = marioDied && ph2 == Play
@@ -153,6 +160,7 @@ step dt gs
     activeTimer   = if respawning then 400                   else newTimer
     activeCam     = if respawning then fromIntegral sW / 2    else cam
     activeFballs  = if respawning then []                    else fb4
+    activeBAnims  = if respawning then []                    else brickAnims'
 
     gsTemp = gs { gMario     = m7
                 , gTiles     = activeTiles
@@ -167,6 +175,7 @@ step dt gs
                 , gFireballs = activeFballs
                 , gTimer     = activeTimer
                 , gCoinCount = newCoinCount
+                , gBrickAnims = activeBAnims
                 }
 
     gs' = case ph2 of
@@ -184,11 +193,12 @@ advanceToNextLevel gs =
                 , gPups      = lPups nextLvl
                 , gCoins     = lCoins nextLvl
                 , gFirebars  = lFirebars nextLvl
-                , gFireballs = []
-                , gCam       = fromIntegral sW / 2
-                , gPhase     = Play
-                , gLevelIdx  = nextIdx
-                , gTimer     = 400
+                , gFireballs  = []
+                , gCam        = fromIntegral sW / 2
+                , gPhase      = Play
+                , gLevelIdx   = nextIdx
+                , gTimer      = 400
+                , gBrickAnims = []
                 }
      else gs { gPhase = Win }
 

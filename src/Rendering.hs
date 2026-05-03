@@ -187,8 +187,9 @@ draw spr gs = return $ pictures
     clock = mAnim (gMario gs)
     world = pictures
       [ drawDecorations spr
-      , drawTilesOfType spr clock isGround      (gTiles gs)
-      , drawTilesOfType spr clock (not.isGround) (gTiles gs)
+      , drawTilesOfType spr clock isGround      anims (gTiles gs)
+      , drawTilesOfType spr clock (not.isGround) anims (gTiles gs)
+      , drawBrickAnims  spr clock anims
       , drawCoins   spr clock (gCoins gs)
       , drawPups    spr clock (gPups  gs)
       , drawFirebars spr clock (gFirebars gs)
@@ -196,6 +197,7 @@ draw spr gs = return $ pictures
       , drawEnem    spr clock (gEnem  gs)
       , drawMario   spr       (gMario gs)
       ]
+    anims = gBrickAnims gs
 
 isGround :: Tile -> Bool
 isGround t = tType t == Ground
@@ -425,23 +427,35 @@ drawBush spr (c, isTriple) =
 tileScale :: Float
 tileScale = ts / 48
 
-drawTiles :: Sprites -> Float -> [Tile] -> Picture
-drawTiles spr clock ts_ =
-  pictures (map (drawTile spr clock) ts_)
+drawTiles :: Sprites -> Float -> [BrickAnim] -> [Tile] -> Picture
+drawTiles spr clock anims ts_ =
+  pictures (map (drawTile spr clock anims) ts_)
 
-drawTilesOfType :: Sprites -> Float -> (Tile -> Bool) -> [Tile] -> Picture
-drawTilesOfType spr clock p ts_ =
-  pictures (map (drawTile spr clock) (filter p ts_))
+drawTilesOfType :: Sprites -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
+drawTilesOfType spr clock p anims ts_ =
+  pictures (map (drawTile spr clock anims) (filter p ts_))
 
-drawTile :: Sprites -> Float -> Tile -> Picture
-drawTile spr clock t = translate tx ty pic
+-- | Look up bump offset for a tile (0 if no active BumpAnim for it).
+bumpOffset :: [BrickAnim] -> Tile -> Float
+bumpOffset anims t = case filter isBump anims of
+    (BumpAnim _ _ timeLeft : _) ->
+      let progress = 1.0 - (timeLeft / 0.12)
+      in sin (pi * progress) * 8.0
+    _ -> 0.0
   where
-    tx  = fromIntegral (tCol t) * ts + ts/2
-    ty  = fromIntegral (tRow t) * ts + ts/2
-    pic = case tType t of
+    isBump (BumpAnim c r _) = c == tCol t && r == tRow t
+    isBump _                = False
+
+drawTile :: Sprites -> Float -> [BrickAnim] -> Tile -> Picture
+drawTile spr clock anims t = translate tx (ty + bump) pic
+  where
+    tx   = fromIntegral (tCol t) * ts + ts/2
+    ty   = fromIntegral (tRow t) * ts + ts/2
+    bump = bumpOffset anims t
+    pic  = case tType t of
       Ground     -> scale tileScale tileScale (spBlockGround spr)
       Brick      -> scale tileScale tileScale (spBlockBrick spr)
-      QBlock     -> scale tileScale tileScale (qBlockFrame spr clock)
+      QBlock _   -> scale tileScale tileScale (qBlockFrame spr clock)
       Used       -> scale tileScale tileScale (spBlockHitEmpty spr)
       Step       -> scale tileScale tileScale (spBlockStep spr)
       PipeTop    ->
@@ -468,6 +482,41 @@ qBlockFrame spr clock =
        9 -> spBlockQuestion3 spr
        f | f < 5 -> spBlockQuestion1 spr
        _          -> spBlockQuestion2 spr
+
+-- ─── Brick / block animations ────────────────────────────────────────────────
+
+-- | Draw transient break and coin-pop effects (bump is handled by tile offset).
+drawBrickAnims :: Sprites -> Float -> [BrickAnim] -> Picture
+drawBrickAnims spr clock anims = pictures (map (drawBrickAnim spr clock) anims)
+
+drawBrickAnim :: Sprites -> Float -> BrickAnim -> Picture
+drawBrickAnim _ _ (BumpAnim _ _ _) = blank  -- handled by bumpOffset in drawTile
+
+drawBrickAnim spr _ (BreakAnim col row timeLeft) =
+  let bx = fromIntegral col * ts + ts / 2
+      by = fromIntegral row * ts
+  in if timeLeft > 0.08
+     then
+       -- Brief broken-sprite flash at bump peak
+       translate bx (by + 8) (scale tileScale tileScale (spBlockBrickBroken spr))
+     else
+       -- Four debris chunks with gravity
+       let age  = 0.08 - timeLeft
+           piece vx0 vy0 =
+             let px = bx + vx0 * age
+                 py = by + 8 + vy0 * age + 0.5 * (-1400) * age * age
+             in translate px py
+                  $ scale (tileScale * 0.5) (tileScale * 0.5)
+                  $ spBlockBrickBroken spr
+       in pictures
+            [ piece (-120)  300
+            , piece   120   300
+            , piece  (-80)  180
+            , piece    80   180
+            ]
+
+drawBrickAnim spr clock (CoinPopAnim x y _ _) =
+  translate x y (coinFrame spr clock)
 
 drawAxe :: Picture
 drawAxe = pictures

@@ -23,7 +23,13 @@ mkPlatform :: Int -> Int -> Int -> [Tile]
 mkPlatform r c1 c2 = mkRow Brick r c1 c2
 
 mkQLine :: Int -> Int -> Int -> [Tile]
-mkQLine r c1 c2 = mkRow QBlock r c1 c2
+mkQLine r c1 c2 = mkRow (QBlock QPowerUp) r c1 c2
+
+mkQCoin :: Int -> Int -> Int -> [Tile]
+mkQCoin r c1 c2 = mkRow (QBlock QCoin) r c1 c2
+
+mkQPower :: Int -> Int -> Int -> [Tile]
+mkQPower r c1 c2 = mkRow (QBlock QPowerUp) r c1 c2
 
 mkUsedLine :: Int -> Int -> Int -> [Tile]
 mkUsedLine r c1 c2 = mkRow Used r c1 c2
@@ -109,49 +115,50 @@ level1_1 :: Level
 level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (198*ts) 1 1
   where
     blocks =
-      -- Lone Q-block at col 16, row 4 (before the main cluster)
-         mkQLine    4 16 16
+      -- Lone Q-block at col 16, row 4: power-up (Mushroom/Flower)
+         mkQPower   4 16 16
 
       -- First brick cluster (cols 20–24, row 4): B ? B ? B
+      -- Q at col 21: coin, Q at col 23: coin
       ++ mkPlatform 4 20 20
-      ++ mkQLine    4 21 21
+      ++ mkQCoin    4 21 21
       ++ mkPlatform 4 22 22
-      ++ mkQLine    4 23 23
+      ++ mkQCoin    4 23 23
       ++ mkPlatform 4 24 24
-      -- Hidden single Q-block above col 22, row 8
-      ++ mkQLine    8 22 22
+      -- Hidden single Q-block above col 22, row 8: power-up
+      ++ mkQPower   8 22 22
 
       -- Second cluster (cols 77–79, row 4): B ? B
-      -- Plus lone brick at col 94 row 4 (image-verified)
+      -- Q at col 78: coin
       ++ mkPlatform 4 77 77
-      ++ mkQLine    4 78 78
+      ++ mkQCoin    4 78 78
       ++ mkPlatform 4 79 79
       ++ mkPlatform 4 94 94
-      -- Row-8 shelf: 8 bricks (80–87), gap, 3 bricks (91–93), Q-block (94)
+      -- Row-8 shelf: 8 bricks (80–87), gap, 3 bricks (91–93), Q-block (94): power-up
       ++ mkPlatform 8 80 87
       ++ mkPlatform 8 91 93
-      ++ mkQLine    8 94 94
+      ++ mkQPower   8 94 94
 
       -- Third cluster (cols 100–101, row 4): B B
       ++ mkPlatform 4 100 101
 
-      -- Fifth cluster (cols 106, 109, 112, row 4): three Q-blocks
-      -- Plus bricks at col 118 row 4 and cols 129–130 row 4 (image-verified)
-      ++ mkQLine    4 106 106
-      ++ mkQLine    4 109 109
-      ++ mkQLine    4 112 112
+      -- Fifth cluster (cols 106, 109, 112, row 4): three Q-blocks — all coins
+      -- Plus bricks at col 118 row 4 and cols 129–130 row 4
+      ++ mkQCoin    4 106 106
+      ++ mkQCoin    4 109 109
+      ++ mkQCoin    4 112 112
       ++ mkPlatform 4 118 118
       ++ mkPlatform 4 129 130
-      -- Row-8 shelf: Q@109, BBB@121–123, B@128, QQ@129–130, B@131
-      ++ mkQLine    8 109 109
+      -- Row-8 shelf: Q@109 power-up, BBB@121–123, B@128, QQ@129–130 coins, B@131
+      ++ mkQPower   8 109 109
       ++ mkPlatform 8 121 123
       ++ mkPlatform 8 128 128
-      ++ mkQLine    8 129 130
+      ++ mkQCoin    8 129 130
       ++ mkPlatform 8 131 131
 
-      -- End cluster (cols 168–171, row 4): B B ? B
+      -- End cluster (cols 168–171, row 4): B B ? B — Q is a coin
       ++ mkPlatform 4 168 169
-      ++ mkQLine    4 170 170
+      ++ mkQCoin    4 170 170
       ++ mkPlatform 4 171 171
 
     -- Ground with pits: three holes confirmed by pixel scan
@@ -232,7 +239,7 @@ level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (208*ts) 1 2
 
     -- ── Early underground ─────────────────────────────────────────────────
     -- "? □ □ □ □": reward block + four bricks at row 2 near the cave entrance.
-    questRow = mkQLine 2 32 32 ++ mkPlatform 2 33 36
+    questRow = mkQPower 2 32 32 ++ mkPlatform 2 33 36
 
     -- Ascending brick staircase A (cols 41–44): column i+1 bricks high.
     stairA = concat [ [Tile (41+i) r Brick | r <- [1..(i+1)]] | i <- [0..3] ]
@@ -245,7 +252,7 @@ level1_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (208*ts) 1 2
 
     -- ── Mid-cave coin + reward cluster ────────────────────────────────────
     -- ? block at row 5 col 73 (Mushroom for Small Mario, Fire Flower otherwise).
-    midQ = mkQLine 5 73 73
+    midQ = mkQPower 5 73 73
 
     -- ── Arch / bracket structures ─────────────────────────────────────────
     -- Arch 1 (cols 88–100):
@@ -347,13 +354,13 @@ level1_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*5) (244*ts) 1 3
       ++ mkPlatform 4 234 236 ++ mkPlatform 5 234 236
 
     jumps =
-         mkQLine 4 16 17
-      ++ mkQLine 6 48 48
-      ++ mkQLine 5 80 81
-      ++ mkQLine 6 112 112
-      ++ mkQLine 5 144 145
-      ++ mkQLine 6 176 176
-      ++ mkQLine 4 208 209
+         mkQPower 4 16 16 ++ mkQCoin  4 17 17
+      ++ mkQPower 6 48 48
+      ++ mkQPower 5 80 80 ++ mkQCoin  5 81 81
+      ++ mkQPower 6 112 112
+      ++ mkQPower 5 144 144 ++ mkQCoin 5 145 145
+      ++ mkQPower 6 176 176
+      ++ mkQPower 4 208 208 ++ mkQCoin 4 209 209
 
     tiles = ground ++ islands ++ jumps
 
@@ -406,7 +413,7 @@ level1_4 = mkLevel tiles enemies coins pups firebars (ts*3) (ts*1.5) (80*ts) 1 4
     -- Gives a Mushroom to Small Mario or a Fire Flower to Big/Fire Mario.
     -- Reachable with a standing jump from the ground (jump height ~142px;
     -- row-3 bottom edge is at 3*ts = 96px — well within range).
-    powerBlock = mkQLine 3 8 8
+    powerBlock = mkQPower 3 8 8
 
     -- ── Brick platform obstacle in floorB ─────────────────────────────────
     platform1 = mkPlatform 3 18 20
@@ -466,36 +473,36 @@ level2_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 2 1
     ground = mkGround 0 212
 
     blocks =
-      -- Cluster 1 (row 3, cols 28-30): B ? B
+      -- Cluster 1 (row 3, cols 28-30): B ? B — power-up
          mkPlatform 3 28 28
-      ++ mkQLine    3 29 29
+      ++ mkQPower    3 29 29
       ++ mkPlatform 3 30 30
-      -- Cluster 2 (row 3, cols 46-50): B ? B ? B  and row-7 triple
+      -- Cluster 2 (row 3, cols 46-50): B ? B ? B — first power-up, second coin
       ++ mkPlatform 3 46 46
-      ++ mkQLine    3 47 47
+      ++ mkQPower    3 47 47
       ++ mkPlatform 3 48 48
-      ++ mkQLine    3 49 49
+      ++ mkQCoin     3 49 49
       ++ mkPlatform 3 50 50
-      ++ mkQLine    7 47 49
-      -- Cluster 3 (row 3, cols 83-87): B B ? B B
+      ++ mkQCoin     7 47 49
+      -- Cluster 3 (row 3, cols 83-87): B B ? B B — coin
       ++ mkPlatform 3 83 84
-      ++ mkQLine    3 85 85
+      ++ mkQCoin     3 85 85
       ++ mkPlatform 3 86 87
-      -- Cluster 4 (row 3, cols 100-102): B ? B
+      -- Cluster 4 (row 3, cols 100-102): B ? B — coin
       ++ mkPlatform 3 100 100
-      ++ mkQLine    3 101 101
+      ++ mkQCoin     3 101 101
       ++ mkPlatform 3 102 102
-      -- Cluster 5 (rows 3+7, cols 108-111): B B B B / ? B ? B
+      -- Cluster 5 (rows 3+7, cols 108-111): B B B B / ? B ? B — alternating
       ++ mkPlatform 3 108 111
-      ++ mkQLine    7 108 108
+      ++ mkQPower    7 108 108
       ++ mkPlatform 7 109 109
-      ++ mkQLine    7 110 110
+      ++ mkQCoin     7 110 110
       ++ mkPlatform 7 111 111
-      -- Row-3 solo blocks in the back half
-      ++ mkQLine    3 130 130
-      ++ mkQLine    3 133 133
+      -- Row-3 solo blocks in the back half — all coins
+      ++ mkQCoin     3 130 130
+      ++ mkQCoin     3 133 133
       ++ mkPlatform 3 134 136
-      ++ mkQLine    3 160 162
+      ++ mkQCoin     3 160 162
       ++ mkPlatform 3 163 165
 
     pipes  = mkPipeGroup [(22,2),(40,3),(55,3),(70,4),(90,2),(150,2),(165,3)]
@@ -539,21 +546,19 @@ level2_2 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (208*ts) 2 2
     caveCeiling = mkCeiling 10 18 192
 
     -- Early cave: ? block row + two ascending stair formations
-    questRow = mkQLine 2 30 30 ++ mkPlatform 2 31 34
+    questRow = mkQPower 2 30 30 ++ mkPlatform 2 31 34
     stairA   = concat [ [Tile (42+i) r Brick | r <- [1..(i+1)]] | i <- [0..3] ]
     stairB   = concat [ [Tile (50+i) r Brick | r <- [1..(i+1)]] | i <- [0..3] ]
 
-    -- Mid-cave: offset platform pair + ? blocks
     midShelfL  = mkPlatform 4 62 68 ++ mkPlatform 4 72 76
-    midQBlocks = mkQLine 4 69 71
+    midQBlocks = mkQPower 4 69 69 ++ mkQCoin 4 70 71
     highShelf  = mkPlatform 7 80 92
-    highQ      = mkQLine 7 86 87
+    highQ      = mkQPower 7 86 86 ++ mkQCoin 7 87 87
 
-    -- Right cave: S-curve formations
     lowerPlat  = mkPlatform 4 98 112
-    lowerQ     = mkQLine 4 105 106
+    lowerQ     = mkQPower 4 105 105 ++ mkQCoin 4 106 106
     upperPlat  = mkPlatform 7 115 130
-    upperQ     = mkQLine 7 122 123
+    upperQ     = mkQPower 7 122 122 ++ mkQCoin 7 123 123
     finalPlat  = mkPlatform 4 133 148
 
     -- Warp zone
@@ -626,13 +631,13 @@ level2_3 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (213*ts) 2 3
 
     -- ? blocks sprinkled above the platforms
     qBlocks =
-         mkQLine 5 15 16
-      ++ mkQLine 6 38 40
-      ++ mkQLine 5 56 57
-      ++ mkQLine 7 79 82
-      ++ mkQLine 5 109 112
-      ++ mkQLine 6 134 136
-      ++ mkQLine 5 174 176
+         mkQPower 5 15 15 ++ mkQCoin 5 16 16
+      ++ mkQPower 6 38 38 ++ mkQCoin 6 39 40
+      ++ mkQPower 5 56 56 ++ mkQCoin 5 57 57
+      ++ mkQPower 7 79 79 ++ mkQCoin 7 80 82
+      ++ mkQPower 5 109 109 ++ mkQCoin 5 110 112
+      ++ mkQPower 6 134 134 ++ mkQCoin 6 135 136
+      ++ mkQPower 5 174 174 ++ mkQCoin 5 175 176
 
     -- Pipes at the edges of some segments (with Piranhas)
     pipes = mkPipeGroup [(16,2),(57,2),(110,3),(175,2)]

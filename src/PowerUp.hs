@@ -1,38 +1,65 @@
-module PowerUp (bumpBlocks, stepPup, grabPups, pickCoins) where
+module PowerUp (bumpBlocks, stepPup, grabPups, pickCoins, stepBrickAnims) where
 
 import Constants (ts, grav)
 import Types
 import Physics (hit, mBB, tBB)
 
 -- | Hit a block from below.
---   • Small Mario    → always spawns a Mushroom
+--   • Small Mario    → always spawns a Mushroom (or coin if QBlock has no pup)
 --   • Big / Fire     → spawns a Fire Flower (no horizontal movement)
 --   • Brick + Big    → brick shatters (no power-up)
-bumpBlocks :: Mario -> Float -> [Tile] -> [PUp] -> Int -> ([Tile],[PUp],Int)
+--   Returns updated tiles, power-ups, score, new BrickAnims, and whether a brick was broken.
+bumpBlocks :: Mario -> Float -> [Tile] -> [PUp] -> Int -> ([Tile],[PUp],Int,[BrickAnim],Bool)
 bumpBlocks m vy tls pus sc
-  | vy <= 0   = (tls, pus, sc)
-  | otherwise = (tls', pus', sc')
+  | vy <= 0   = (tls, pus, sc, [], False)
+  | otherwise = (tls', pus', sc', anims, broke)
   where
     (_,my,mw,mh) = mBB m
     headB = (mX m, my + mh/2 + 2, mw*0.65, 6)
     bumped = filter (hit headB . tBB) tls
-    (tls', pus', sc') = case bumped of
-      []    -> (tls, pus, sc)
+    (tls', pus', sc', anims, broke) = case bumped of
+      []    -> (tls, pus, sc, [], False)
       (t:_) -> case tType t of
-        QBlock ->
+        QBlock content ->
           let tls2  = map (\x -> if samePos x t then x { tType = Used } else x) tls
-              -- Spawn position: just above the block
               bx    = fromIntegral (tCol t) * ts
               by    = fromIntegral (tRow t + 1) * ts + ts * 0.5
-              -- Small Mario gets a Mushroom; powered-up Mario gets a Fire Flower
-              pType = if mState m == Small then Mushroom else FireFlower
-              pu0   = PUp bx by 120 True pType
-          in (tls2, pu0:pus, sc + 50)
+              bump  = BumpAnim (tCol t) (tRow t) 0.12
+              coinPop = CoinPopAnim (fromIntegral (tCol t) * ts + ts/2)
+                                    (fromIntegral (tRow t + 1) * ts)
+                                    420 0.65
+          in case content of
+               QCoin ->
+                 -- Always pops a coin regardless of Mario's state
+                 (tls2, pus, sc + 200, [bump, coinPop], False)
+               QPowerUp ->
+                 -- Small Mario gets Mushroom; Big/Fire gets Fire Flower
+                 let pType = if mState m == Small then Mushroom else FireFlower
+                     pu0   = PUp bx by 120 True pType
+                 in (tls2, pu0:pus, sc + 50, [bump], False)
         Brick | mState m == Big || mState m == Fire ->
-          let tls2 = filter (\x -> not (samePos x t)) tls
-          in (tls2, pus, sc + 50)
-        _ -> (tls, pus, sc)
+          let tls2  = filter (\x -> not (samePos x t)) tls
+              brk   = BreakAnim (tCol t) (tRow t) 0.15
+          in (tls2, pus, sc + 50, [brk], True)
+        Brick ->
+          let bump = BumpAnim (tCol t) (tRow t) 0.12
+          in (tls, pus, sc, [bump], False)
+        _ -> (tls, pus, sc, [], False)
     samePos a b = tCol a == tCol b && tRow a == tRow b
+
+-- | Advance all brick/block animations by one frame, discarding expired ones.
+stepBrickAnims :: Float -> [BrickAnim] -> [BrickAnim]
+stepBrickAnims dt = filter alive . map step
+  where
+    step (BumpAnim  c r t)       = BumpAnim  c r (t - dt)
+    step (BreakAnim c r t)       = BreakAnim c r (t - dt)
+    step (CoinPopAnim x y vy t)  =
+      let y'  = y + vy * dt
+          vy' = vy + grav * dt
+      in CoinPopAnim x y' vy' (t - dt)
+    alive (BumpAnim  _ _ t)      = t > 0
+    alive (BreakAnim _ _ t)      = t > 0
+    alive (CoinPopAnim _ _ _ t)  = t > 0
 
 -- | Advance a power-up one frame.
 --   Mushrooms slide to the right; Fire Flowers stay put (no horizontal velocity).

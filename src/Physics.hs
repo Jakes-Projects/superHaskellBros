@@ -21,7 +21,7 @@ eBB e = (eX e + ts/2, eY e + ts/2, ts*0.78, ts*0.78)
 solid :: TType -> Bool
 solid Ground      = True
 solid Brick       = True
-solid QBlock      = True
+solid (QBlock _)   = True
 solid Used        = True
 solid PipeTop     = True
 solid Pipe        = True
