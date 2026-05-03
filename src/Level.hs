@@ -106,68 +106,89 @@ mkBowser c = Enemy (fromIntegral c * ts) (ts*2) (-60) 0 EAlive Bowser
 --------------------------------------------------------------------------------
 
 level1_1 :: Level
-level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (204*ts) 1 1
+level1_1 = mkLevel tiles enemies coins [] [] (ts*3) (ts*1.5) (198*ts) 1 1
   where
-    ground = mkGround 0 211
-
     blocks =
-      -- First brick cluster (cols 20–24, row 3):  B ? B ? B
-      -- Original layout: col20=Brick, 21=QBlock, 22=Brick, 23=QBlock, 24=Brick
-         mkPlatform 3 20 20
-      ++ mkQLine    3 21 21
-      ++ mkPlatform 3 22 22
-      ++ mkQLine    3 23 23
-      ++ mkPlatform 3 24 24
-      -- Hidden single QBlock above the gap, col 22, row 7
-      ++ mkQLine    7 22 22
+      -- Lone Q-block at col 16, row 4 (before the main cluster)
+         mkQLine    4 16 16
 
-      -- Second brick cluster (cols 78–82, row 3): B ? B B B
-      -- Row-7 QBlocks: 78, 79, 80
-      ++ mkPlatform 3 78 78
-      ++ mkQLine    3 79 79
-      ++ mkPlatform 3 80 82
-      ++ mkQLine    7 78 80
+      -- First brick cluster (cols 20–24, row 4): B ? B ? B
+      ++ mkPlatform 4 20 20
+      ++ mkQLine    4 21 21
+      ++ mkPlatform 4 22 22
+      ++ mkQLine    4 23 23
+      ++ mkPlatform 4 24 24
+      -- Hidden single Q-block above col 22, row 8
+      ++ mkQLine    8 22 22
 
-      -- Third cluster (cols 91–95, row 3): B B ? B B
-      ++ mkPlatform 3 91 92
-      ++ mkQLine    3 93 93
-      ++ mkPlatform 3 94 95
+      -- Second cluster (cols 77–79, row 4): B ? B
+      -- Plus lone brick at col 94 row 4 (image-verified)
+      ++ mkPlatform 4 77 77
+      ++ mkQLine    4 78 78
+      ++ mkPlatform 4 79 79
+      ++ mkPlatform 4 94 94
+      -- Row-8 shelf: 8 bricks (80–87), gap, 3 bricks (91–93), Q-block (94)
+      ++ mkPlatform 8 80 87
+      ++ mkPlatform 8 91 93
+      ++ mkQLine    8 94 94
 
-      -- Fourth cluster (cols 100–102, row 3): B ? B
-      ++ mkPlatform 3 100 100
-      ++ mkQLine    3 101 101
-      ++ mkPlatform 3 102 102
+      -- Third cluster (cols 100–101, row 4): B B
+      ++ mkPlatform 4 100 101
 
-      -- Fifth cluster (cols 107–110, row 3 & 7):  B B B / B ? B B
-      ++ mkPlatform 3 107 109
-      ++ mkPlatform 7 107 107
-      ++ mkQLine    7 108 108
-      ++ mkPlatform 7 109 110
+      -- Fifth cluster (cols 106, 109, 112, row 4): three Q-blocks
+      -- Plus bricks at col 118 row 4 and cols 129–130 row 4 (image-verified)
+      ++ mkQLine    4 106 106
+      ++ mkQLine    4 109 109
+      ++ mkQLine    4 112 112
+      ++ mkPlatform 4 118 118
+      ++ mkPlatform 4 129 130
+      -- Row-8 shelf: Q@109, BBB@121–123, B@128, QQ@129–130, B@131
+      ++ mkQLine    8 109 109
+      ++ mkPlatform 8 121 123
+      ++ mkPlatform 8 128 128
+      ++ mkQLine    8 129 130
+      ++ mkPlatform 8 131 131
 
-    pipes  = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(163,2)]
-    stairs = mkStairsUp 127 4 ++ mkStairsDown 133 4
-          ++ mkStairsUp 140 4 ++ mkStairsDown 146 4
-    finish = mkStairsUp 196 8
-    flag   = mkFlag 204
-    castle = mkCastle 207
+      -- End cluster (cols 168–171, row 4): B B ? B
+      ++ mkPlatform 4 168 169
+      ++ mkQLine    4 170 170
+      ++ mkPlatform 4 171 171
+
+    -- Ground with pits: three holes confirmed by pixel scan
+    --   Hole 1: cols 69–70   (2 tiles)
+    --   Hole 2: cols 86–88   (3 tiles)
+    --   Hole 3: cols 153–154 (2 tiles)
+    ground = mkGround  0  68
+          ++ mkGround 71  85
+          ++ mkGround 89 152
+          ++ mkGround 155 211
+
+    pipes  = mkPipeGroup [(28,2),(38,3),(46,4),(57,4),(163,2),(179,2)]
+
+    -- Staircase pair 1: up 4 (cols 134–137) + down 4 (cols 140–143)
+    -- Staircase pair 2: up 4 (cols 148–151) + cap col (152, h=4) + down 4 (cols 155–158)
+    stairs = mkStairsUp 134 4 ++ mkStairsDown 140 4
+          ++ mkStairsUp 148 4 ++ [Tile 152 r Step | r <- [1..4]]
+          ++ mkStairsDown 155 4
+
+    -- Final staircase: 8 steps up (cols 181–188) + cap column (189, h=8)
+    finish = mkStairsUp 181 8 ++ [Tile 189 r Step | r <- [1..8]]
+    flag   = mkFlag 198
+    castle = mkCastle 202
 
     tiles = ground ++ blocks ++ pipes ++ stairs ++ finish ++ flag ++ castle
 
     enemies =
-      -- col 55 instead of 57: pipe (57,4) occupies cols 57-58
-      -- col 132 instead of 130: stairsUp 127 fills col 130 rows 1-4;
-      --   cols 131-132 are the clear gap between the two staircase pairs
-         map mkG [22,37,40,55,59,80,82,100,102,110,116,150,152]
-      ++ map mkK [60,92,132]
+      -- Goombas placed on clear ground, away from pipes (28,38,46,57,163) and
+      -- the new staircase positions (134-158) and final staircase (181-189).
+         map mkG [22, 37, 40, 55, 59, 80, 82, 100, 102, 110, 116, 144, 160]
+      -- Koopas: col 60 (after pipe pair), col 92 (gap between clusters),
+      -- col 130 (gap between the two staircase pairs 134 and 148)
+      ++ map mkK [60, 92, 130]
+      -- Piranhas in each pipe: heights are pipe_height - 1 (row inside pipe top)
       ++ map mkP [(28,1),(38,2),(46,3),(57,3),(163,1)]
 
-    -- Coins in the original 1-1 sit *only* inside the ? blocks (col 21, 23,
-    -- 79, 82, 93, 101, 108).  They are NOT pre-placed floating in the air;
-    -- they fly out when Mario bumps the block.  The only visible coins at
-    -- game start are those inside the row-7 hidden blocks.  We keep a small
-    -- selection of non-? coins that are genuinely floating in the overworld
-    -- (none in the vanilla 1-1, so we leave the coin list empty here and let
-    -- bumpBlocks handle the ? block coins).
+    -- Coins: pre-placed coins are empty; ? block coins fly out on bump.
     coins = mkCoins []
 
 --------------------------------------------------------------------------------

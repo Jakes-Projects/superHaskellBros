@@ -20,7 +20,7 @@ initGS =
         , gCoins      = lCoins startLevel
         , gScore      = 0
         , gLives      = 3
-        , gCam        = lStartX startLevel
+        , gCam        = fromIntegral sW / 2
         , gKeys       = KS False False False False False
         , gPhase      = Play
         , gLevelIdx   = 0
@@ -42,7 +42,7 @@ loadLevel idx gs
             , gCoins     = lCoins lvl
             , gFirebars  = lFirebars lvl
             , gFireballs = []
-            , gCam       = lStartX lvl
+            , gCam       = fromIntegral sW / 2
             , gPhase     = Play
             , gLevelIdx  = idx
             , gTimer     = 400
@@ -73,7 +73,7 @@ step dt gs
              , mInv      = max 0 (mInv m1 - dt)
              , mFireCool = max 0 (mFireCool m1 - dt) }
 
-    cam = max (gCam gs) (mX m2)
+    cam = max (gCam gs) (max (fromIntegral sW / 2) (mX m2))
 
     -- ── Enemies ──────────────────────────────────────────────────────────
     es1  = map (stepEnemy dt sol m2) (gEnem gs)
@@ -151,7 +151,7 @@ step dt gs
     activePups    = if respawning then lPups    currentLevel else pu3
     activeTiles   = if respawning then lTiles   currentLevel else ts2
     activeTimer   = if respawning then 400                   else newTimer
-    activeCam     = if respawning then lStartX  currentLevel else cam
+    activeCam     = if respawning then fromIntegral sW / 2    else cam
     activeFballs  = if respawning then []                    else fb4
 
     gsTemp = gs { gMario     = m7
@@ -185,7 +185,7 @@ advanceToNextLevel gs =
                 , gCoins     = lCoins nextLvl
                 , gFirebars  = lFirebars nextLvl
                 , gFireballs = []
-                , gCam       = lStartX nextLvl
+                , gCam       = fromIntegral sW / 2
                 , gPhase     = Play
                 , gLevelIdx  = nextIdx
                 , gTimer     = 400

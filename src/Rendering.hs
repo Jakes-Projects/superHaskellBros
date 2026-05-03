@@ -339,23 +339,61 @@ skyBlue :: Color
 skyBlue = makeColorI 97 133 248 255
 
 -- ─── Decorations ─────────────────────────────────────────────────────────────
+-- All positions derived from pixel-by-pixel analysis of the NES reference image.
+-- Clouds alternate between two heights: ~306 (lower row) and ~338 (upper row).
+-- Size 1 = single cloud sprite, size 2 = double cloud sprite.
 
 cloudPositions :: [(Float, Float, Int)]
 cloudPositions =
-  [ (6,10,1), (24,10,2), (44,10,1), (64,10,2)
-  , (80,10,1), (98,10,2), (118,10,1), (136,10,1)
-  , (154,10,2), (172,10,1), (192,10,1)
+  [ (  8, 306, 1 )   -- single, lower
+  , ( 19, 338, 1 )   -- single, upper
+  , ( 27, 306, 2 )   -- double, lower
+  , ( 36, 338, 2 )   -- double, upper
+  , ( 56, 306, 1 )
+  , ( 67, 338, 1 )
+  , ( 75, 306, 2 )
+  , ( 84, 338, 2 )
+  , (104, 306, 1 )
+  , (115, 338, 1 )
+  , (123, 306, 2 )
+  , (132, 338, 2 )
+  , (152, 306, 1 )
+  , (163, 338, 1 )
+  , (171, 306, 2 )
+  , (180, 338, 2 )
+  , (197, 320, 2 )
   ]
 
-hillPositions :: [(Int, Float, Float)]
-hillPositions = zip3 [0..]
-  [0, 16, 48, 80, 96, 128, 160, 192]
-  (repeat 1)
+-- Hills: large mounds use spHillLarge, small mounds use spHillSmall.
+-- Each entry: (col_anchor, isLarge)
+hillPositions :: [(Float, Bool)]
+hillPositions =
+  [ (  0, True  )   -- large, start of level
+  , ( 38, False )   -- small
+  , ( 46, True  )   -- large, wide mound
+  , ( 96, True  )   -- large
+  , (144, False )   -- small
+  , (192, True  )   -- large, near end
+  ]
 
-bushPositions :: [(Int, Float, Float)]
-bushPositions = zip3 [0..]
-  [11, 23, 35, 57, 73, 89, 105, 121, 145, 170, 185]
-  (repeat 1)
+-- Bushes: single shrub or triple shrub.
+-- Each entry: (col_anchor, isTriple)
+bushPositions :: [(Float, Bool)]
+bushPositions =
+  [ ( 12, False )
+  , ( 16, False )
+  , ( 28, False )
+  , ( 42, False )
+  , ( 60, False )
+  , ( 64, False )
+  -- col 90 bush omitted: sits 1 tile from pit edge (cols 86-88), bleeds visually over gap
+  , (108, False )
+  , (112, False )
+  , (138, False )
+  , (160, True  )   -- triple bush
+  , (179, False )
+  , (208, False )
+  ]
 
 drawDecorations :: Sprites -> Picture
 drawDecorations spr = pictures $
@@ -364,25 +402,23 @@ drawDecorations spr = pictures $
   map (drawBush  spr) bushPositions
 
 drawCloud :: Sprites -> (Float, Float, Int) -> Picture
-drawCloud spr (c, _, sz) =
-  let x = c * ts + ts/2
-      y = 10 * ts
+drawCloud spr (c, gameY, sz) =
+  let x   = c * ts + ts/2
       pic = if sz == 1 then spCloudSingle spr else spCloudDouble spr
-  in translate x y pic
+  in translate x gameY pic
 
-drawHill :: Sprites -> (Int, Float, Float) -> Picture
-drawHill spr (idx, c, _) =
+drawHill :: Sprites -> (Float, Bool) -> Picture
+drawHill spr (c, isLarge) =
   let x   = c * ts + ts
-      pic = if even idx then spHillSmall spr else spHillLarge spr
-      y   = if even idx then ts + 32 else ts + 56
+      pic = if isLarge then spHillLarge spr else spHillSmall spr
+      y   = if isLarge then ts + 56 else ts + 32
   in translate x y pic
 
-drawBush :: Sprites -> (Int, Float, Float) -> Picture
-drawBush spr (idx, c, _) =
+drawBush :: Sprites -> (Float, Bool) -> Picture
+drawBush spr (c, isTriple) =
   let x   = c * ts
-      pic = if even idx then spBushSingle spr else spBushTriple spr
-      y   = ts + 8
-  in translate x y pic
+      pic = if isTriple then spBushTriple spr else spBushSingle spr
+  in translate x (ts + 8) pic
 
 -- ─── Tiles ────────────────────────────────────────────────────────────────────
 
