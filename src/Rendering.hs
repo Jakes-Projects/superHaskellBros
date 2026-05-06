@@ -82,6 +82,20 @@ data Sprites = Sprites
   , spCoin2    :: Picture
   , spCoin3    :: Picture
   , spCoin4    :: Picture
+    -- Fire Mario shoot sprite
+  , spFireShoot   :: Picture
+    -- Joe Fire Mario sprites (activated by typing "joe" as Fire Mario)
+  , spJoeStand    :: Picture
+  , spJoeRun1     :: Picture
+  , spJoeRun2     :: Picture
+  , spJoeRun3     :: Picture
+  , spJoeJump     :: Picture
+  , spJoeCrouch   :: Picture
+  , spJoeShoot    :: Picture
+  , spJoeFireball1 :: Picture
+  , spJoeFireball2 :: Picture
+  , spJoeFireball3 :: Picture
+  , spJoeFireball4 :: Picture
   }
 
 -- ─── Loader ───────────────────────────────────────────────────────────────────
@@ -169,6 +183,20 @@ loadSprites = Sprites
   <*> loadPNG "assets/coin_2.png"
   <*> loadPNG "assets/coin_3.png"
   <*> loadPNG "assets/coin_4.png"
+  -- Fire Mario shoot
+  <*> loadPNG "assets/mario_fire_fireball_shoot.png"
+  -- Joe Fire Mario
+  <*> loadPNG "assets/joe_fire_stand.png"
+  <*> loadPNG "assets/joe_fire_run_1.png"
+  <*> loadPNG "assets/joe_fire_run_2.png"
+  <*> loadPNG "assets/joe_fire_run_3.png"
+  <*> loadPNG "assets/joe_fire_jump.png"
+  <*> loadPNG "assets/joe_fire_crouch.png"
+  <*> loadPNG "assets/joe_fire_fireball_shoot.png"
+  <*> loadPNG "assets/fireball_haskell_1.png"
+  <*> loadPNG "assets/fireball_haskell_2.png"
+  <*> loadPNG "assets/fireball_haskell_3.png"
+  <*> loadPNG "assets/fireball_haskell_4.png"
 
 -- ─── World Y offset ──────────────────────────────────────────────────────────
 worldYOffset :: Float
@@ -193,7 +221,7 @@ draw spr gs = return $ pictures
       , drawCoins   spr clock (gCoins gs)
       , drawPups    spr clock (gPups  gs)
       , drawFirebars spr clock (gFirebars gs)
-      , drawPlayerFireballs spr clock (gFireballs gs)
+      , drawPlayerFireballs spr clock (mJoeMode (gMario gs)) (gFireballs gs)
       , drawEnem    spr clock (gEnem  gs)
       , drawMario   spr       (gMario gs)
       ]
@@ -227,13 +255,15 @@ drawMario spr m
 
 pickMarioFrame :: Sprites -> Mario -> Picture
 pickMarioFrame spr m =
-  let airborne = not (mGround m)
-      wFrame   = (floor (mAnim m * 10) :: Int) `mod` 3
-      still    = abs (mVX m) < 5 && mGround m
+  let airborne  = not (mGround m)
+      wFrame    = (floor (mAnim m * 10) :: Int) `mod` 3
+      still     = abs (mVX m) < 5 && mGround m
       crouching = mCrouch m
+      joe       = mJoeMode m
+      shooting  = mFireCool m > 0.2   -- show shoot frame for first half of cooldown
   in case mState m of
        Big   -> pickBigFrame   spr airborne still crouching wFrame
-       Fire  -> pickFireFrame  spr airborne still crouching wFrame
+       Fire  -> pickFireFrame  spr joe shooting airborne still crouching wFrame
        _     -> pickSmallFrame spr airborne still wFrame
 
 pickSmallFrame :: Sprites -> Bool -> Bool -> Int -> Picture
@@ -253,14 +283,26 @@ pickBigFrame spr airborne still crouching wFrame
   | wFrame == 1 = spBigRun2   spr
   | otherwise   = spBigRun3   spr
 
-pickFireFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
-pickFireFrame spr airborne still crouching wFrame
-  | crouching   = spFireCrouch spr
-  | airborne    = spFireJump   spr
-  | still       = spFireStand  spr
-  | wFrame == 0 = spFireRun1   spr
-  | wFrame == 1 = spFireRun2   spr
-  | otherwise   = spFireRun3   spr
+pickFireFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
+pickFireFrame spr joe shooting airborne still crouching wFrame
+  | joe       = pickJoeFrame  spr shooting airborne still crouching wFrame
+  | shooting  = spFireShoot   spr
+  | crouching = spFireCrouch  spr
+  | airborne  = spFireJump    spr
+  | still     = spFireStand   spr
+  | wFrame == 0 = spFireRun1  spr
+  | wFrame == 1 = spFireRun2  spr
+  | otherwise   = spFireRun3  spr
+
+pickJoeFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
+pickJoeFrame spr shooting airborne still crouching wFrame
+  | shooting    = spJoeShoot  spr
+  | crouching   = spJoeCrouch spr
+  | airborne    = spJoeJump   spr
+  | still       = spJoeStand  spr
+  | wFrame == 0 = spJoeRun1   spr
+  | wFrame == 1 = spJoeRun2   spr
+  | otherwise   = spJoeRun3   spr
 
 -- ─── Enemies ──────────────────────────────────────────────────────────────────
 
@@ -591,16 +633,26 @@ fireballFrame spr clock =
        2 -> spFireball3 spr
        _ -> spFireball4 spr
 
-drawPlayerFireballs :: Sprites -> Float -> [Fireball] -> Picture
-drawPlayerFireballs spr clock = pictures . map (drawPlayerFireball spr clock)
+drawPlayerFireballs :: Sprites -> Float -> Bool -> [Fireball] -> Picture
+drawPlayerFireballs spr clock joe = pictures . map (drawPlayerFireball spr clock joe)
 
-drawPlayerFireball :: Sprites -> Float -> Fireball -> Picture
-drawPlayerFireball spr clock fb
+drawPlayerFireball :: Sprites -> Float -> Bool -> Fireball -> Picture
+drawPlayerFireball spr clock joe fb
   | not (fiAlive fb) = blank
   | fiBowser fb      = translate (fiX fb) (fiY fb)
                          $ scale (if fiVX fb > 0 then -1 else 1) 1
                          $ bowserFireFrame spr clock
-  | otherwise        = translate (fiX fb) (fiY fb) (fireballFrame spr clock)
+  | otherwise        = translate (fiX fb) (fiY fb)
+                         $ (if joe then joeFireballFrame else fireballFrame) spr clock
+
+joeFireballFrame :: Sprites -> Float -> Picture
+joeFireballFrame spr clock =
+  let frame = (floor (clock * 8) :: Int) `mod` 4
+  in case frame of
+       0 -> spJoeFireball1 spr
+       1 -> spJoeFireball2 spr
+       2 -> spJoeFireball3 spr
+       _ -> spJoeFireball4 spr
 
 -- Bowser fire cycles between the two bowser_fire sprites at 8fps
 bowserFireFrame :: Sprites -> Float -> Picture
@@ -693,7 +745,7 @@ drawHUD gs =
       -- Timer turns red when below 100 (NES urgency cue)
       timerColor = if timerVal < 100 then red else white
   in pictures
-       [ hudLabel "MARIO"  (hudCol 0)
+       [ hudLabel (if mJoeMode (gMario gs) then "JOE" else "MARIO") (hudCol 0)
        , hudLabel "COINS"  (hudCol 1)
        , hudLabel "WORLD"  (hudCol 2)
        , hudLabel "TIME"   (hudCol 3)

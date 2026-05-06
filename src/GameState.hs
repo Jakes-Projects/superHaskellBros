@@ -22,6 +22,7 @@ initGS =
         , gLives      = 3
         , gCam        = fromIntegral sW / 2
         , gKeys       = KS False False False False False
+
         , gPhase      = Play
         , gLevelIdx   = 0
         , gLevels     = allLevels
@@ -73,7 +74,10 @@ step dt gs
     -- Decrement timers (animation, invincibility, fire cooldown)
     m2 = m1 { mAnim     = mAnim m1 + dt
              , mInv      = max 0 (mInv m1 - dt)
-             , mFireCool = max 0 (mFireCool m1 - dt) }
+             , mFireCool = max 0 (mFireCool m1 - dt)
+             -- If Mario lost Fire state, clear Joe mode
+             , mJoeMode  = mJoeMode m1 && mState m1 == Fire
+             }
 
     cam = max (gCam gs) (max (fromIntegral sW / 2) (mX m2))
 
@@ -230,11 +234,24 @@ handleEv (EventKey (Char d) Down _ _) gs
   | d >= '1' && d <= '8' = loadLevel (fromEnum d - fromEnum '1') gs
 handleEv _ gs | gPhase gs /= Play = gs
 handleEv ev gs = case ev of
-  EventKey k Down _ _ -> gs { gMario = tryJump' k (gMario gs)
+  EventKey k Down _ _ -> gs { gMario = tryJump' k (joeCheck k (bufferKey k (gMario gs)))
                              , gKeys  = setK k True  (gKeys gs) }
   EventKey k Up   _ _ -> gs { gKeys  = setK k False (gKeys gs) }
   _ -> gs
   where
+    -- Append letter to the buffer, keep last 3 chars only
+    bufferKey (Char c) m | c `elem` ("joe" :: String) =
+      let buf' = drop (max 0 (length (mJoeBuffer m) + 1 - 3)) (mJoeBuffer m ++ [c])
+      in m { mJoeBuffer = buf' }
+    bufferKey _ m = m
+
+    -- Toggle joe mode if buffer == "joe" and Mario is Fire; reset buffer either way
+    joeCheck (Char _) m
+      | mJoeBuffer m == "joe" && mState m == Fire =
+          m { mJoeMode = not (mJoeMode m), mJoeBuffer = "" }
+      | mJoeBuffer m == "joe" =
+          m { mJoeBuffer = "" }
+    joeCheck _ m = m
     setK (Char 'a')            v k = k { kL   = v }
     setK (Char 'd')            v k = k { kR   = v }
     setK (SpecialKey KeyLeft)  v k = k { kL   = v }

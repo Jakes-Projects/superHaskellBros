@@ -47,6 +47,8 @@ data Mario = Mario
   , mInv        :: Float
   , mFireCool   :: Float   -- seconds until next fireball can be shot
   , mCrouch     :: Bool    -- crouching (Big/Fire only, grounded, down held)
+  , mJoeMode    :: Bool    -- True when "joe" skin is active (Fire only)
+  , mJoeBuffer  :: String  -- tracks recent keypresses for "joe" detection
   } deriving Show
 
 -- | A fireball shot by Fire Mario.
