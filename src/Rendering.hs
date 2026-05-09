@@ -84,6 +84,21 @@ data Sprites = Sprites
   , spCoin4    :: Picture
     -- Fire Mario shoot sprite
   , spFireShoot   :: Picture
+    -- Moving platform
+  , spPlatform    :: Picture
+    -- Underground variants
+  , spUgBlockGround      :: Picture
+  , spUgBlockBrick       :: Picture
+  , spUgBlockBrickBroken :: Picture
+  , spUgBlockHitEmpty    :: Picture
+  , spUgBlockStep        :: Picture
+  , spUgGoomba1          :: Picture
+  , spUgGoomba2          :: Picture
+  , spUgGoombaCrushed    :: Picture
+  , spUgKoopa1           :: Picture
+  , spUgKoopa2           :: Picture
+  , spUgKoopaShell       :: Picture
+  , spUgKoopaResetting   :: Picture
     -- Joe Fire Mario sprites (activated by typing "joe" as Fire Mario)
   , spJoeStand    :: Picture
   , spJoeRun1     :: Picture
@@ -185,6 +200,21 @@ loadSprites = Sprites
   <*> loadPNG "assets/coin_4.png"
   -- Fire Mario shoot
   <*> loadPNG "assets/mario_fire_fireball_shoot.png"
+  -- Moving platform
+  <*> loadPNG "assets/platform_moving.png"
+  -- Underground variants
+  <*> loadPNG "assets/block_ground_ug.png"
+  <*> loadPNG "assets/block_brick_ug.png"
+  <*> loadPNG "assets/block_brick_broken_ug.png"
+  <*> loadPNG "assets/block_hit_empty_ug.png"
+  <*> loadPNG "assets/block_step_ug.png"
+  <*> loadPNG "assets/goomba_1_ug.png"
+  <*> loadPNG "assets/goomba_2_ug.png"
+  <*> loadPNG "assets/goomba_crushed_ug.png"
+  <*> loadPNG "assets/koopa_green_1_ug.png"
+  <*> loadPNG "assets/koopa_green_2_ug.png"
+  <*> loadPNG "assets/koopa_green_shell_ug.png"
+  <*> loadPNG "assets/koopa_green_resetting_ug.png"
   -- Joe Fire Mario
   <*> loadPNG "assets/joe_fire_stand.png"
   <*> loadPNG "assets/joe_fire_run_1.png"
@@ -204,25 +234,33 @@ worldYOffset = -(fromIntegral sH / 2) + 3.0 * ts - ts   -- = -236
 
 -- ─── Top-level draw ───────────────────────────────────────────────────────────
 
+-- | True when the current level uses the underground / castle theme.
+isUnderground :: GS -> Bool
+isUnderground gs =
+  let lvl = gLevels gs !! gLevelIdx gs
+  in lNumber lvl == 2 || lNumber lvl == 4
+
 draw :: Sprites -> GS -> IO Picture
 draw spr gs = return $ pictures
-  [ drawSky
+  [ drawSkyFor gs
   , translate (-(gCam gs)) worldYOffset world
   , drawHUD gs
   , drawOverlay gs
   ]
   where
+    underground = isUnderground gs
     clock = mAnim (gMario gs)
     world = pictures
-      [ drawDecorations spr
-      , drawTilesOfType spr clock isGround      anims (gTiles gs)
-      , drawTilesOfType spr clock (not.isGround) anims (gTiles gs)
-      , drawBrickAnims  spr clock anims
+      [ if underground then blank else drawDecorations spr
+      , drawTilesOfType spr underground clock isGround      anims (gTiles gs)
+      , drawTilesOfType spr underground clock (not.isGround) anims (gTiles gs)
+      , drawBrickAnims  spr underground clock anims
+      , drawPlatforms spr (gPlatforms gs)
       , drawCoins   spr clock (gCoins gs)
       , drawPups    spr clock (gPups  gs)
       , drawFirebars spr clock (gFirebars gs)
       , drawPlayerFireballs spr clock (mJoeMode (gMario gs)) (gFireballs gs)
-      , drawEnem    spr clock (gEnem  gs)
+      , drawEnem    spr underground clock (gEnem  gs)
       , drawMario   spr       (gMario gs)
       ]
     anims = gBrickAnims gs
@@ -306,38 +344,52 @@ pickJoeFrame spr shooting airborne still crouching wFrame
 
 -- ─── Enemies ──────────────────────────────────────────────────────────────────
 
-drawEnem :: Sprites -> Float -> [Enemy] -> Picture
-drawEnem spr clock = pictures . map (drawE spr clock)
+drawEnem :: Sprites -> Bool -> Float -> [Enemy] -> Picture
+drawEnem spr ug clock = pictures . map (drawE spr ug clock)
 
-drawE :: Sprites -> Float -> Enemy -> Picture
-drawE spr clock e = case eState e of
-  EDead _         -> translate cx (eY e + 5)          (spGoombaCrushed spr)
+drawE :: Sprites -> Bool -> Float -> Enemy -> Picture
+drawE spr ug clock e = case eState e of
+  EDead _         -> translate cx (eY e + 5)          (if ug then spUgGoombaCrushed spr else spGoombaCrushed spr)
   EShell timer moving -> translate cx (eY e + spriteHalf) (shellPic timer moving)
-  EBowser _ _ _   -> translate cx (eY e + spriteHalf) (drawEnemyBody spr clock e)
+  EBowser _ _ _   -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
   _               ->
     if shouldDrawAlive (eState e)
-      then translate cx (eY e + spriteHalf) (drawEnemyBody spr clock e)
+      then translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
       else blank
   where
     cx = eX e + ts/2
     spriteHalf = 24
 
     shellPic timer moving
-      | moving           = spKoopaShell     spr
-      | timer <= 2.0     = spKoopaResetting spr
-      | otherwise        = spKoopaShell     spr
+      | moving           = if ug then spUgKoopaShell spr     else spKoopaShell spr
+      | timer <= 2.0     = if ug then spUgKoopaResetting spr else spKoopaResetting spr
+      | otherwise        = if ug then spUgKoopaShell spr     else spKoopaShell spr
 
     shouldDrawAlive st = case st of
       EAlive        -> True
       EPiranha _ up -> up
       _             -> False
 
-drawEnemyBody :: Sprites -> Float -> Enemy -> Picture
-drawEnemyBody spr clock e = case eType e of
-  Goomba  -> scale marioScale marioScale $ goombaFrame spr clock
-  Koopa   -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr clock e
+drawEnemyBody :: Sprites -> Bool -> Float -> Enemy -> Picture
+drawEnemyBody spr ug clock e = case eType e of
+  Goomba  -> scale marioScale marioScale $ goombaFrame spr ug clock
+  Koopa   -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr ug clock e
   Piranha -> translate 0 (ts * 0.6) drawPiranha
   Bowser  -> drawBowser spr clock e
+
+goombaFrame :: Sprites -> Bool -> Float -> Picture
+goombaFrame spr ug clock =
+  if even (floor (clock * 8) :: Int)
+    then if ug then spUgGoomba1 spr else spGoomba1 spr
+    else if ug then spUgGoomba2 spr else spGoomba2 spr
+
+koopaFrame :: Sprites -> Bool -> Float -> Enemy -> Picture
+koopaFrame spr ug clock e = case eState e of
+  EShell _ _ -> if ug then spUgKoopaShell spr else spKoopaShell spr
+  _ ->
+    if even (floor (clock * 8) :: Int)
+      then if ug then spUgKoopa1 spr else spKoopa1 spr
+      else if ug then spUgKoopa2 spr else spKoopa2 spr
 
 -- Bowser cycles through 4 walk frames at half speed (clock * 4 mod 4).
 -- Sprite faces LEFT by default — flip when moving RIGHT (eVX > 0).
@@ -355,21 +407,12 @@ drawBowser spr clock e =
 koopaFace :: Enemy -> Float
 koopaFace e = if eVX e >= 0 then 1 else -1
 
-goombaFrame :: Sprites -> Float -> Picture
-goombaFrame spr clock =
-  if even (floor (clock * 8) :: Int)
-    then spGoomba1 spr
-    else spGoomba2 spr
-
-koopaFrame :: Sprites -> Float -> Enemy -> Picture
-koopaFrame spr clock e = case eState e of
-  EShell _ _ -> spKoopaShell spr
-  _ ->
-    if even (floor (clock * 8) :: Int)
-      then spKoopa1 spr
-      else spKoopa2 spr
-
 -- ─── Primitives ───────────────────────────────────────────────────────────────
+
+drawSkyFor :: GS -> Picture
+drawSkyFor gs
+  | isUnderground gs = color black     (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+  | otherwise        = color skyBlue   (rectangleSolid (fromIntegral sW) (fromIntegral sH))
 
 drawSky :: Picture
 drawSky = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
@@ -464,13 +507,45 @@ drawBush spr (c, isTriple) =
 tileScale :: Float
 tileScale = ts / 48
 
-drawTiles :: Sprites -> Float -> [BrickAnim] -> [Tile] -> Picture
-drawTiles spr clock anims ts_ =
-  pictures (map (drawTile spr clock anims) ts_)
+drawTiles :: Sprites -> Bool -> Float -> [BrickAnim] -> [Tile] -> Picture
+drawTiles spr ug clock anims ts_ =
+  pictures (map (drawTile spr ug clock anims) ts_)
 
-drawTilesOfType :: Sprites -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
-drawTilesOfType spr clock p anims ts_ =
-  pictures (map (drawTile spr clock anims) (filter p ts_))
+drawTilesOfType :: Sprites -> Bool -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
+drawTilesOfType spr ug clock p anims ts_ =
+  pictures (map (drawTile spr ug clock anims) (filter p ts_))
+
+drawTile :: Sprites -> Bool -> Float -> [BrickAnim] -> Tile -> Picture
+drawTile spr ug clock anims t = translate tx (ty + bump) pic
+  where
+    tx   = fromIntegral (tCol t) * ts + ts/2
+    ty   = fromIntegral (tRow t) * ts + ts/2
+    bump = bumpOffset anims t
+    ground spr_ = scale tileScale tileScale (if ug then spUgBlockGround spr_ else spBlockGround spr_)
+    brick  spr_ = scale tileScale tileScale (if ug then spUgBlockBrick  spr_ else spBlockBrick  spr_)
+    step   spr_ = scale tileScale tileScale (if ug then spUgBlockStep   spr_ else spBlockStep   spr_)
+    empty  spr_ = scale tileScale tileScale (if ug then spUgBlockHitEmpty spr_ else spBlockHitEmpty spr_)
+    pic  = case tType t of
+      Ground     -> ground spr
+      Brick      -> brick  spr
+      QBlock _   -> scale tileScale tileScale (qBlockFrame spr clock)
+      Used       -> empty  spr
+      Step       -> step   spr
+      PipeTop    ->
+        let h       = fromIntegral (tRow t) :: Float
+            scaleX  = 2 * ts / 48
+            scaleY  = h * ts / 96
+            offsetY = ts * (1 - h) / 2
+        in translate (ts/2) offsetY $ scale scaleX scaleY (spPipe spr)
+      Pipe       -> blank
+      PipeR      -> blank
+      FlagPole   -> drawFlagPole
+      FlagBase   -> drawFlagBase
+      Castle     -> drawCastle t
+      SlopeLeft  -> ground spr
+      SlopeRight -> ground spr
+      Axe        -> drawAxe
+      _          -> blank
 
 -- | Look up bump offset for a tile (0 if no active BumpAnim for it).
 bumpOffset :: [BrickAnim] -> Tile -> Float
@@ -483,34 +558,6 @@ bumpOffset anims t = case filter isBump anims of
     isBump (BumpAnim c r _) = c == tCol t && r == tRow t
     isBump _                = False
 
-drawTile :: Sprites -> Float -> [BrickAnim] -> Tile -> Picture
-drawTile spr clock anims t = translate tx (ty + bump) pic
-  where
-    tx   = fromIntegral (tCol t) * ts + ts/2
-    ty   = fromIntegral (tRow t) * ts + ts/2
-    bump = bumpOffset anims t
-    pic  = case tType t of
-      Ground     -> scale tileScale tileScale (spBlockGround spr)
-      Brick      -> scale tileScale tileScale (spBlockBrick spr)
-      QBlock _   -> scale tileScale tileScale (qBlockFrame spr clock)
-      Used       -> scale tileScale tileScale (spBlockHitEmpty spr)
-      Step       -> scale tileScale tileScale (spBlockStep spr)
-      PipeTop    ->
-        let h       = fromIntegral (tRow t) :: Float
-            scaleX  = 2 * ts / 48
-            scaleY  = h * ts / 96
-            offsetY = ts * (1 - h) / 2
-        in translate (ts/2) offsetY $ scale scaleX scaleY (spPipe spr)
-      Pipe       -> blank
-      PipeR      -> blank
-      FlagPole   -> drawFlagPole
-      FlagBase   -> drawFlagBase
-      Castle     -> drawCastle t
-      SlopeLeft  -> scale tileScale tileScale (spBlockGround spr)
-      SlopeRight -> scale tileScale tileScale (spBlockGround spr)
-      Axe        -> drawAxe
-      _          -> blank
-
 qBlockFrame :: Sprites -> Float -> Picture
 qBlockFrame spr clock =
   let frame = (floor (clock * 4) :: Int) `mod` 10
@@ -522,29 +569,24 @@ qBlockFrame spr clock =
 
 -- ─── Brick / block animations ────────────────────────────────────────────────
 
--- | Draw transient break and coin-pop effects (bump is handled by tile offset).
-drawBrickAnims :: Sprites -> Float -> [BrickAnim] -> Picture
-drawBrickAnims spr clock anims = pictures (map (drawBrickAnim spr clock) anims)
+drawBrickAnims :: Sprites -> Bool -> Float -> [BrickAnim] -> Picture
+drawBrickAnims spr ug clock anims = pictures (map (drawBrickAnim spr ug clock) anims)
 
-drawBrickAnim :: Sprites -> Float -> BrickAnim -> Picture
-drawBrickAnim _ _ (BumpAnim _ _ _) = blank  -- handled by bumpOffset in drawTile
+drawBrickAnim :: Sprites -> Bool -> Float -> BrickAnim -> Picture
+drawBrickAnim _ _ _ (BumpAnim _ _ _) = blank  -- handled by bumpOffset in drawTile
 
-drawBrickAnim spr _ (BreakAnim col row timeLeft) =
+drawBrickAnim spr ug _ (BreakAnim col row timeLeft) =
   let bx = fromIntegral col * ts + ts / 2
       by = fromIntegral row * ts
+      broken = if ug then spUgBlockBrickBroken spr else spBlockBrickBroken spr
   in if timeLeft > 0.08
-     then
-       -- Brief broken-sprite flash at bump peak
-       translate bx (by + 8) (scale tileScale tileScale (spBlockBrickBroken spr))
+     then translate bx (by + 8) (scale tileScale tileScale broken)
      else
-       -- Four debris chunks with gravity
        let age  = 0.08 - timeLeft
            piece vx0 vy0 =
              let px = bx + vx0 * age
                  py = by + 8 + vy0 * age + 0.5 * (-1400) * age * age
-             in translate px py
-                  $ scale (tileScale * 0.5) (tileScale * 0.5)
-                  $ spBlockBrickBroken spr
+             in translate px py $ scale (tileScale * 0.5) (tileScale * 0.5) broken
        in pictures
             [ piece (-120)  300
             , piece   120   300
@@ -552,7 +594,7 @@ drawBrickAnim spr _ (BreakAnim col row timeLeft) =
             , piece    80   180
             ]
 
-drawBrickAnim spr clock (CoinPopAnim x y _ _) =
+drawBrickAnim spr _ clock (CoinPopAnim x y _ _) =
   translate x y (coinFrame spr clock)
 
 drawAxe :: Picture
@@ -685,8 +727,25 @@ fireFlowerFrame spr clock =
        2 -> spFireFlower3 spr
        _ -> spFireFlower4 spr
 
--- Coins
-drawCoins :: Sprites -> Float -> [(Float,Float,Bool)] -> Picture
+-- ─── Moving Platforms ────────────────────────────────────────────────────────
+-- The platform sprite is 120×26 px — the full platform as one image.
+-- mpX is the left edge, mpY is the top surface Y in world coords.
+
+drawPlatforms :: Sprites -> [MovingPlatform] -> Picture
+drawPlatforms spr = pictures . map (drawPlatform spr)
+
+drawPlatform :: Sprites -> MovingPlatform -> Picture
+drawPlatform spr mp =
+  -- Centre the 120×26 sprite horizontally over the platform's tile span
+  -- and position it so its top surface sits at mpY.
+  let platWidthPx = fromIntegral (mpWidth mp) * ts   -- world width in px
+      sprW = 120 :: Float
+      sprH = 26  :: Float
+      cx = mpX mp + platWidthPx / 2                  -- centre X
+      cy = mpY mp + ts/2 - sprH/2                    -- centre Y (top flush with mpY+ts/2)
+  in translate cx cy (spPlatform spr)
+
+-- ─── Coins ───────────────────────────────────────────────────────────────────
 drawCoins spr clock = pictures . map (drawCoin spr clock)
 
 drawCoin :: Sprites -> Float -> (Float,Float,Bool) -> Picture

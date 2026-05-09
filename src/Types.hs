@@ -74,17 +74,30 @@ data BrickAnim
   | CoinPopAnim Float Float Float Float  -- x, y, vy, timeLeft
   deriving Show
 
+-- | A moving platform (lift/elevator).
+--   Travels vertically between yMin and yMax at the given speed.
+--   width is in tiles (e.g. 3 = 3 tiles wide).
+data MovingPlatform = MovingPlatform
+  { mpX     :: Float   -- world X (left edge)
+  , mpY     :: Float   -- world Y (top surface, like row * ts)
+  , mpVY    :: Float   -- current vertical velocity (positive = up)
+  , mpYMin  :: Float   -- lower bound (Y at bottom of travel)
+  , mpYMax  :: Float   -- upper bound (Y at top of travel)
+  , mpWidth :: Int     -- width in tiles
+  } deriving Show
+
 data Level = Level
-  { lTiles    :: [Tile]
-  , lEnemies  :: [Enemy]
-  , lCoins    :: [(Float,Float,Bool)]
-  , lPups     :: [PUp]
-  , lFirebars :: [Firebar]
-  , lStartX   :: Float
-  , lStartY   :: Float
-  , lEndX     :: Float
-  , lWorld    :: Int
-  , lNumber   :: Int
+  { lTiles     :: [Tile]
+  , lEnemies   :: [Enemy]
+  , lCoins     :: [(Float,Float,Bool)]
+  , lPups      :: [PUp]
+  , lFirebars  :: [Firebar]
+  , lPlatforms :: [MovingPlatform]
+  , lStartX    :: Float
+  , lStartY    :: Float
+  , lEndX      :: Float
+  , lWorld     :: Int
+  , lNumber    :: Int
   } deriving Show
 
 data Firebar = Firebar
@@ -108,10 +121,11 @@ data GS = GS
   , gLevelIdx   :: Int
   , gLevels     :: [Level]
   , gFirebars   :: [Firebar]
-  , gFireballs  :: [Fireball]   -- Mario's active fireballs
+  , gFireballs  :: [Fireball]
   , gTimer      :: Float
   , gCoinCount  :: Int
   , gBrickAnims :: [BrickAnim]
+  , gPlatforms  :: [MovingPlatform]
   } deriving Show
 
 type BB = (Float,Float,Float,Float)

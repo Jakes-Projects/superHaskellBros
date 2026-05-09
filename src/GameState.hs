@@ -31,6 +31,7 @@ initGS =
         , gTimer      = 400
         , gCoinCount  = 0
         , gBrickAnims = []
+        , gPlatforms  = lPlatforms startLevel
         }
 
 loadLevel :: Int -> GS -> GS
@@ -49,11 +50,50 @@ loadLevel idx gs
             , gLevelIdx  = idx
             , gTimer     = 400
             , gBrickAnims = []
+            , gPlatforms  = lPlatforms lvl
             }
   | otherwise = gs
 
 stepFirebar :: Float -> Firebar -> Firebar
 stepFirebar dt fb = fb { fbAngle = fbAngle fb + fbSpeed fb * dt }
+
+-- | Step a single moving platform: move, bounce at bounds.
+stepPlatform :: Float -> MovingPlatform -> MovingPlatform
+stepPlatform dt mp =
+  let y1 = mpY mp + mpVY mp * dt
+      vy1 = mpVY mp
+      (y2, vy2)
+        | y1 <= mpYMin mp = (mpYMin mp,  abs vy1)
+        | y1 >= mpYMax mp = (mpYMax mp, -(abs vy1))
+        | otherwise       = (y1, vy1)
+  in mp { mpY = y2, mpVY = vy2 }
+
+-- | True if Mario's horizontal range overlaps the platform.
+marioOverlapsPlatformX :: Mario -> MovingPlatform -> Bool
+marioOverlapsPlatformX m mp =
+  let mLeft  = mX m - ts * 0.39
+      mRight = mX m + ts * 0.39
+      pLeft  = mpX mp
+      pRight = mpX mp + fromIntegral (mpWidth mp) * ts
+  in mRight > pLeft && mLeft < pRight
+
+-- | True if Mario is riding this platform (feet at or just above the surface).
+marioOnPlatform :: Mario -> MovingPlatform -> Bool
+marioOnPlatform m mp =
+  let mBot = mY m - ts * 0.5
+      pTop = mpY mp + ts * 0.5
+  in marioOverlapsPlatformX m mp && mBot >= pTop - 4 && mBot <= pTop + 8
+
+-- | Snap Mario onto any platform he's touching from above — top surface only,
+--   no side collisions. Sets mGround=True and kills downward velocity.
+resolvePlatforms :: [MovingPlatform] -> Mario -> Mario
+resolvePlatforms plats m =
+  case filter (marioOnPlatform m) plats of
+    []     -> m
+    (mp:_) ->
+      let pTop  = mpY mp + ts * 0.5
+          halfH = if mState m == Big || mState m == Fire then ts else ts * 0.5
+      in m { mY = pTop + halfH, mVY = 0, mGround = True }
 
 step :: Float -> GS -> GS
 step dt gs
@@ -65,19 +105,36 @@ step dt gs
 
     currentLevel = gLevels gs !! gLevelIdx gs
 
-    -- ── Mario movement + physics ─────────────────────────────────────────
-    m0 = inputMario ks (gMario gs)
+    -- ── Moving platforms ──────────────────────────────────────────────────
+    oldPlats = gPlatforms gs
+    newPlats = map (stepPlatform dt) oldPlats
+
+    -- Pre-carry: move Mario vertically with his platform before physics runs.
+    -- This keeps him tracking the platform so physics just confirms grounding.
+    mRiding = filter (marioOnPlatform (gMario gs)) oldPlats
+    mPreMoved = case mRiding of
+      []     -> gMario gs
+      (mp:_) ->
+        let newMp = head $ filter (\p -> abs (mpX p - mpX mp) < 1) newPlats
+            dy    = mpY newMp - mpY mp
+        in (gMario gs) { mY = mY (gMario gs) + dy }
+
+    -- ── Mario movement + physics (static tiles only) ──────────────────────
+    -- Platforms are NOT in sol — physicsMario never sees their sides.
+    -- resolvePlatforms handles top-surface snap after normal physics.
+    m0 = inputMario ks mPreMoved
     m1 = if mState m0 == MDead
            then m0 { mVY = max (-900) (mVY m0 + grav * dt)
                    , mY  = mY m0 + mVY m0 * dt }
            else physicsMario dt sol m0
-    -- Decrement timers (animation, invincibility, fire cooldown)
-    m2 = m1 { mAnim     = mAnim m1 + dt
-             , mInv      = max 0 (mInv m1 - dt)
-             , mFireCool = max 0 (mFireCool m1 - dt)
-             -- If Mario lost Fire state, clear Joe mode
-             , mJoeMode  = mJoeMode m1 && mState m1 == Fire
-             }
+    m1p = resolvePlatforms newPlats m1
+
+    -- Decrement timers
+    m2 = m1p { mAnim     = mAnim m1p + dt
+              , mInv      = max 0 (mInv m1p - dt)
+              , mFireCool = max 0 (mFireCool m1p - dt)
+              , mJoeMode  = mJoeMode m1p && mState m1p == Fire
+              }
 
     cam = max (gCam gs) (max (fromIntegral sW / 2) (mX m2))
 
@@ -187,6 +244,7 @@ step dt gs
     activeCam     = if respawning then fromIntegral sW / 2    else cam
     activeFballs  = if respawning then []                    else fb4
     activeBAnims  = if respawning then []                    else brickAnims'
+    activePlats   = if respawning then lPlatforms currentLevel else newPlats
 
     gsTemp = gs { gMario     = m7
                 , gTiles     = activeTiles
@@ -202,6 +260,7 @@ step dt gs
                 , gTimer     = activeTimer
                 , gCoinCount = newCoinCount
                 , gBrickAnims = activeBAnims
+                , gPlatforms  = activePlats
                 }
 
     gs' = case ph2 of
@@ -219,12 +278,13 @@ advanceToNextLevel gs =
                 , gPups      = lPups nextLvl
                 , gCoins     = lCoins nextLvl
                 , gFirebars  = lFirebars nextLvl
-                , gFireballs  = []
+                , gFireballs = []
                 , gCam        = fromIntegral sW / 2
                 , gPhase      = Play
                 , gLevelIdx   = nextIdx
                 , gTimer      = 400
                 , gBrickAnims = []
+                , gPlatforms  = lPlatforms nextLvl
                 }
      else gs { gPhase = Win }
 
