@@ -480,68 +480,140 @@ level1_4 = mkLevel tiles enemies coins pups firebars [] (ts*3) (ts*1.5) (80*ts) 
 
 --------------------------------------------------------------------------------
 -- World 2-1
--- Overworld: denser than 1-1 — more enemies, tighter pipe placement,
--- multi-row block clusters, and longer stretches between safe ground.
+-- Overworld redesign based on the original 2-1 map.
+-- No underground bonus room and no fake climbable vine.
+-- The sky route is a middle optional section, not a way to skip the whole level.
 --------------------------------------------------------------------------------
 
 level2_1 :: Level
-level2_1 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (204*ts) 2 1
+level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
   where
-    ground = mkGround 0 212
+    -- Custom castle helper so the castle sits ON TOP of ground row 0,
+    -- instead of overlapping/embedding into it like mkCastle does.
+    castleOnGround c =
+      mkRect Castle c (c+4) 1 5 ++
+      [Tile x 6 Castle | x <- [c, c+2, c+4]]
+
+    ground = mkGround 0 216
+
+    startCastle = castleOnGround 0
+
+    -- Small terrain detail after the starting castle.
+    startSteps =
+         [Tile 12 1 Step]
+      ++ [Tile 13 r Step | r <- [1,2]]
+      ++ [Tile 14 r Step | r <- [1..3]]
+      ++ [Tile 15 r Step | r <- [1,2]]
 
     blocks =
-      -- Cluster 1 (row 3, cols 28-30): B ? B — power-up
-         mkPlatform 3 28 28
-      ++ mkQPower    3 29 29
-      ++ mkPlatform 3 30 30
-      -- Cluster 2 (row 3, cols 46-50): B ? B ? B — first power-up, second coin
-      ++ mkPlatform 3 46 46
-      ++ mkQPower    3 47 47
-      ++ mkPlatform 3 48 48
-      ++ mkQCoin     3 49 49
-      ++ mkPlatform 3 50 50
-      ++ mkQCoin     7 47 49
-      -- Cluster 3 (row 3, cols 83-87): B B ? B B — coin
-      ++ mkPlatform 3 83 84
-      ++ mkQCoin     3 85 85
-      ++ mkPlatform 3 86 87
-      -- Cluster 4 (row 3, cols 100-102): B ? B — coin
-      ++ mkPlatform 3 100 100
-      ++ mkQCoin     3 101 101
-      ++ mkPlatform 3 102 102
-      -- Cluster 5 (rows 3+7, cols 108-111): B B B B / ? B ? B — alternating
-      ++ mkPlatform 3 108 111
-      ++ mkQPower    7 108 108
-      ++ mkPlatform 7 109 109
-      ++ mkQCoin     7 110 110
-      ++ mkPlatform 7 111 111
-      -- Row-3 solo blocks in the back half — all coins
-      ++ mkQCoin     3 130 130
-      ++ mkQCoin     3 133 133
-      ++ mkPlatform 3 134 136
-      ++ mkQCoin     3 160 162
-      ++ mkPlatform 3 163 165
+      -- Early reachable power-up cluster.
+         mkPlatform 3 21 21
+      ++ mkQPower   3 22 22
+      ++ mkPlatform 3 23 24
 
-    pipes  = mkPipeGroup [(22,2),(40,3),(55,3),(70,4),(90,2),(150,2),(165,3)]
-    stairs = mkStairsUp 188 4 ++ mkStairsDown 194 4
-    finish = mkStairsUp 196 8
-    flag   = mkFlag 204
-    castle = mkCastle 207
+      -- Second block group.
+      ++ mkPlatform 3 32 32
+      ++ mkQCoin    3 33 33
+      ++ mkPlatform 3 34 34
+      ++ mkQPower   3 35 35
+      ++ mkPlatform 3 36 36
 
-    tiles = ground ++ blocks ++ pipes ++ stairs ++ finish ++ flag ++ castle
+      -- Mid-low cluster before pipes.
+      ++ mkPlatform 4 47 47
+      ++ mkQPower   4 48 48
+      ++ mkPlatform 4 49 49
+      ++ mkQCoin    4 50 50
+      ++ mkPlatform 4 51 51
+
+      -- More normal lower-level blocks so the bottom path still matters.
+      ++ mkPlatform 3 64 65
+      ++ mkQCoin    3 66 66
+      ++ mkPlatform 3 67 68
+
+      -- Middle access to the sky section.
+      -- This replaces the fake vine. Mario reaches it by jumping platform to platform.
+      ++ mkPlatform 2 82 85
+      ++ mkPlatform 4 88 91
+      ++ mkPlatform 6 94 98
+
+      -- Sky platform only covers the middle section.
+      -- It ends before the back half so Mario must drop down and continue the level.
+      ++ mkRow Step 8 101 123
+
+      -- Exit/drop-down helpers from the sky platform.
+      ++ mkPlatform 6 124 127
+      ++ mkPlatform 4 130 132
+
+      -- Back-half block clusters after Mario drops back down.
+      ++ mkPlatform 3 140 140
+      ++ mkQPower   3 141 141
+      ++ mkQCoin    3 142 142
+      ++ mkPlatform 3 143 144
+
+      ++ mkPlatform 4 156 156
+      ++ mkQCoin    4 157 157
+      ++ mkQPower   4 158 158
+      ++ mkPlatform 4 159 160
+
+      ++ mkPlatform 3 176 177
+      ++ mkQCoin    3 178 178
+      ++ mkPlatform 3 179 180
+
+    -- Pipes adjusted so they do not block the sky access too much.
+    pipes = mkPipeGroup
+      [ (39,2)
+      , (54,3)
+      , (72,2)
+      , (134,3)
+      , (150,4)
+      , (169,3)
+      ]
+
+    -- Tall final staircase, flag, and ending castle.
+    finish = mkStairsUp 190 8 ++ [Tile 198 r Step | r <- [1..8]]
+    flag   = mkFlag 205
+    castle = castleOnGround 209
+
+    tiles =
+         ground
+      ++ startCastle
+      ++ startSteps
+      ++ blocks
+      ++ pipes
+      ++ finish
+      ++ flag
+      ++ castle
 
     enemies =
-         map mkG [10,25,43,65,80,97,112,126,140,153,170,183,193]
-      ++ map mkK [35,60,86,106,118,158]
-      ++ map mkP [(40,2),(70,3),(165,2)]
+         map mkG [18,27,44,60,77,87,105,118,137,147,162,181,187]
+      ++ map mkK [34,69,112,154,176]
+      ++ map mkP [(39,1),(54,2),(134,2),(150,3),(169,2)]
 
     coins = mkCoins $
-         [(47,5),(48,5),(49,5)]       -- above row-3 cluster 2
-      ++ [(85,5)]                     -- above cluster 3 ? block
-      ++ [(101,5)]                    -- above cluster 4 ? block
-      ++ [(108,9),(109,9),(110,9)]    -- above row-7 cluster 5
-      ++ [(130,5),(133,5)]            -- solo Q blocks
-      ++ [(160,5),(161,5),(162,5)]    -- back-half row
+         -- Early coin lines above reachable blocks.
+         [(21,5),(22,5),(23,5),(24,5)]
+      ++ [(32,5),(33,5),(34,5),(35,5),(36,5)]
+      ++ [(c,6) | c <- [47..51]]
+
+      -- Lower path coins before the sky access.
+      ++ [(64,5),(65,5),(66,5),(67,5),(68,5)]
+
+      -- Coins guiding the player upward.
+      ++ [(82,4),(83,4),(84,4),(85,4)]
+      ++ [(88,6),(89,6),(90,6),(91,6)]
+      ++ [(94,8),(95,8),(96,8),(97,8),(98,8)]
+
+      -- Middle sky coins.
+      ++ [(c,10) | c <- [101..116]]
+      ++ [(c,11) | c <- [119..121]]
+
+      -- Coins after dropping back down.
+      ++ [(140,5),(141,5),(142,5),(143,5),(144,5)]
+      ++ [(156,6),(157,6),(158,6),(159,6),(160,6)]
+      ++ [(176,5),(177,5),(178,5),(179,5),(180,5)]
+
+      -- Coins before the ending staircase.
+      ++ [(c,5) | c <- [184..188]]
 
 --------------------------------------------------------------------------------
 -- World 2-2
