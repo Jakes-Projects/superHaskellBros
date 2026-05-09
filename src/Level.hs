@@ -617,76 +617,129 @@ level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
 
 --------------------------------------------------------------------------------
 -- World 2-2
--- NOTE: The original 2-2 is an underwater level with Bloopers and Cheep-cheeps.
--- Swimming physics and those enemy types are not yet implemented, so this is a
--- placeholder underground level with a different layout from 1-2.
--- The ceiling is slightly lower, platforms form an S-curve, and enemies are
--- denser to reflect the increased difficulty of World 2.
+-- Simplified underwater-style version.
+-- No swimming physics yet, so this is still playable with normal Mario movement.
+-- The goal is to make it look/feel more like an underwater corridor:
+--   • entry pipe
+--   • low floor + ceiling
+--   • seaweed/coral decorations
+--   • floating coin trails
+--   • fewer land-style enemies
+--   • exit pipe into final flag area
 --------------------------------------------------------------------------------
 
 level2_2 :: Level
-level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (208*ts) 2 2
+level2_2 = mkLevel tiles enemies coins [] [] [] (ts*12) (ts*1.5) (213*ts) 2 2
   where
-    ground = mkGround 0 215
+    -- Castle helper so the ending castle sits on top of ground instead of inside it.
+    castleOnGround c =
+      mkRect Castle c (c+4) 1 5 ++
+      [Tile x 6 Castle | x <- [c, c+2, c+4]]
 
-    entryPipe = mkPipe 14 2
+    -- Continuous floor because we do not have swim physics yet.
+    -- This keeps the level playable while still making it feel underwater.
+    ground = mkGround 0 225
 
-    -- Tighter ceiling than 1-2 (row 10 instead of 11)
-    caveCeiling = mkCeiling 10 18 192
+    -- Entry pipe behind Mario, like he has just come into the water section.
+    entryPipe = mkPipe 5 3
 
-    -- Early cave: ? block row + two ascending stair formations
-    questRow = mkQPower 2 30 30 ++ mkPlatform 2 31 34
-    stairA   = concat [ [Tile (42+i) r Brick | r <- [1..(i+1)]] | i <- [0..3] ]
-    stairB   = concat [ [Tile (50+i) r Brick | r <- [1..(i+1)]] | i <- [0..3] ]
+    -- Long underwater ceiling/corridor.
+    ceiling =
+         mkRow Brick 10 0 198
+      ++ mkRow Brick 9  36 48
+      ++ mkRow Brick 9  82 94
+      ++ mkRow Brick 9  136 148
 
-    midShelfL  = mkPlatform 4 62 68 ++ mkPlatform 4 72 76
-    midQBlocks = mkQPower 4 69 69 ++ mkQCoin 4 70 71
-    highShelf  = mkPlatform 7 80 92
-    highQ      = mkQPower 7 86 86 ++ mkQCoin 7 87 87
+    -- Non-solid seaweed/coral look using FlagPole tiles.
+    -- It is decorative, so Mario can walk through it.
+    seaweed =
+      concat
+        [ [Tile c r FlagPole | r <- [1..h]]
+        | (c,h) <- [(20,3),(27,2),(44,4),(63,3),(78,2),(101,4),
+                    (119,3),(137,2),(158,4),(176,3),(190,2)]
+        ]
 
-    lowerPlat  = mkPlatform 4 98 112
-    lowerQ     = mkQPower 4 105 105 ++ mkQCoin 4 106 106
-    upperPlat  = mkPlatform 7 115 130
-    upperQ     = mkQPower 7 122 122 ++ mkQCoin 7 123 123
-    finalPlat  = mkPlatform 4 133 148
+    -- Solid rock/coral shapes on the floor.
+    -- These create underwater-looking obstacles without blocking the whole path.
+    coralRocks =
+         [Tile 30 1 Step, Tile 31 1 Step, Tile 31 2 Step]
+      ++ [Tile 57 1 Step, Tile 58 1 Step]
+      ++ [Tile 87 1 Step, Tile 88 1 Step, Tile 89 1 Step, Tile 89 2 Step]
+      ++ [Tile 126 1 Step, Tile 127 1 Step, Tile 127 2 Step]
+      ++ [Tile 166 1 Step, Tile 167 1 Step, Tile 168 1 Step]
 
-    -- Warp zone
-    warpPipe2  = mkPipe 162 2
-    warpPipe3  = mkPipe 166 3
-    warpPipe4  = mkPipe 170 4
+    -- Platforms are used as "swim path" ledges for now.
+    -- They make the floating coin lines reachable with normal jumping.
+    platforms =
+         mkPlatform 3 24 30
+      ++ mkPlatform 4 42 50
+      ++ mkPlatform 3 68 76
+      ++ mkPlatform 5 92 104
+      ++ mkPlatform 3 116 124
+      ++ mkPlatform 4 143 154
+      ++ mkPlatform 3 172 184
 
-    -- Two exit pipes with Piranhas
-    underExitA = mkPipe 185 2
-    underExitB = mkPipe 189 2
+    -- A few reachable power-up/coin blocks.
+    -- These are kept low enough so Mario can actually hit them.
+    blocks =
+         mkQPower 3 25 25
+      ++ mkQCoin  3 26 27
+      ++ mkQCoin  4 46 48
+      ++ mkQPower 5 98 98
+      ++ mkQCoin  5 99 101
+      ++ mkQPower 4 148 148
+      ++ mkQCoin  4 149 151
 
-    surfaceExit = mkPipe 194 3
-    finish      = mkStairsUp 200 8
-    flag        = mkFlag 208
-    castle      = mkCastle 211
+    -- Pipes inside the water section.
+    -- These help it look closer to underwater SMB layouts.
+    waterPipes =
+         mkPipe 54 3
+      ++ mkPipe 95 2
+      ++ mkPipe 141 3
 
-    tiles = ground
-         ++ entryPipe ++ caveCeiling
-         ++ questRow ++ stairA ++ stairB
-         ++ midShelfL ++ midQBlocks
-         ++ highShelf ++ highQ
-         ++ lowerPlat ++ lowerQ
-         ++ upperPlat ++ upperQ
-         ++ finalPlat
-         ++ warpPipe2 ++ warpPipe3 ++ warpPipe4
-         ++ underExitA ++ underExitB
-         ++ surfaceExit ++ finish ++ flag ++ castle
+    -- Exit pipe leading into the final surface-style ending.
+    exitPipe = mkPipe 198 3
 
+    finish = mkStairsUp 204 8 ++ [Tile 212 r Step | r <- [1..8]]
+    flag   = mkFlag 213
+    castle = castleOnGround 217
+
+    tiles =
+         ground
+      ++ entryPipe
+      ++ ceiling
+      ++ seaweed
+      ++ coralRocks
+      ++ platforms
+      ++ blocks
+      ++ waterPipes
+      ++ exitPipe
+      ++ finish
+      ++ flag
+      ++ castle
+
+    -- No Cheep-cheeps/Bloopers yet, so keep enemies lighter.
+    -- Koopas act as stand-ins so it does not feel like a normal Goomba cave.
     enemies =
-         map mkG [35,56,70,85,100,118,130,148,175,197]
-      ++ map mkK [48,78,110,140]
-      ++ [ mkP (185,1), mkP (189,1) ]
+         map mkK [38,72,112,132,161,181]
+      ++ map mkG [33,84,156]
+      ++ map mkP [(54,2),(95,1),(141,2),(198,2)]
 
+    -- Floating coin trails. Most are placed near platforms so they are reachable
+    -- without swimming physics.
     coins = mkCoins $
-         [(30,4),(31,4),(32,4)]          -- early ? row
-      ++ [(69,6),(70,6),(71,6)]          -- above midShelfL Q blocks
-      ++ [(86,9),(87,9)]                 -- above highShelf Q blocks
-      ++ [(105,6),(106,6)]               -- above lowerPlat Q blocks
-      ++ [(122,9),(123,9)]               -- above upperPlat Q blocks
+         [(c,5) | c <- [24..30]]
+      ++ [(c,6) | c <- [42..50]]
+      ++ [(c,5) | c <- [68..76]]
+      ++ [(c,7) | c <- [92..104]]
+      ++ [(c,5) | c <- [116..124]]
+      ++ [(c,6) | c <- [143..154]]
+      ++ [(c,5) | c <- [172..184]]
+
+      -- Extra underwater-style coin arcs/trails.
+      ++ [(35,4),(36,5),(37,6),(38,6),(39,5),(40,4)]
+      ++ [(108,4),(109,5),(110,6),(111,6),(112,5),(113,4)]
+      ++ [(187,4),(188,5),(189,6),(190,6),(191,5),(192,4)]
 
 --------------------------------------------------------------------------------
 -- World 2-3
