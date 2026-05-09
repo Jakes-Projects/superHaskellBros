@@ -11,7 +11,7 @@ inputMario ks m
   where
     -- Crouch when down is held and powered up. No mGround check here —
     -- that caused a circular dependency with physicsMario shrinking the BB.
-    crouching = kD ks && (mState m == Big || mState m == Fire)
+    crouching = kD ks && (mState m == Big || mState m == Fire) && mGround m
     spd = if kRun ks then runSpd else walkSpd
     -- No horizontal movement while crouching
     vx | crouching  = mVX m * 0.78   -- decelerate to a stop

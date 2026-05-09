@@ -254,14 +254,18 @@ handleEv ev gs = case ev of
     joeCheck _ m = m
     setK (Char 'a')            v k = k { kL   = v }
     setK (Char 'd')            v k = k { kR   = v }
+    setK (Char 'w')            v k = k { kJ   = v }   -- ← ADD: W jumps
+    setK (Char 's')            v k = k { kD   = v }   -- ← ADD: S crouches
     setK (SpecialKey KeyLeft)  v k = k { kL   = v }
     setK (SpecialKey KeyRight) v k = k { kR   = v }
     setK (SpecialKey KeySpace) v k = k { kJ   = v }
     setK (SpecialKey KeyUp)    v k = k { kJ   = v }
+    setK (SpecialKey KeyDown)  v k = k { kD   = v }   -- ← ADD: arrow down also crouches
     setK (Char 'z')            v k = k { kRun = v }
     setK (Char 'x')            v k = k { kRun = v }
     setK _ _ k = k
 
     tryJump' (SpecialKey KeySpace) m = tryJump m
     tryJump' (SpecialKey KeyUp)    m = tryJump m
-    tryJump' _ m = m
+    tryJump' (Char 'w')            m = tryJump m       -- ← ADD: W also triggers jump
+    tryJump' _ m = m    
