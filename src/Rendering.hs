@@ -67,6 +67,7 @@ data Sprites = Sprites
   , spBlockStep        :: Picture
     -- Pipe
   , spPipe             :: Picture
+  , spPipe90           :: Picture
     -- Decorations
   , spCloudSingle :: Picture
   , spCloudDouble :: Picture
@@ -237,6 +238,7 @@ loadSprites = Sprites
   <*> loadPNG "assets/block_step.png"
   -- Pipe
   <*> loadPNG "assets/pipe.png"
+  <*> loadPNG "assets/pipe_90_degree.png"
   -- Decorations
   <*> loadPNG "assets/cloud_single.png"
   <*> loadPNG "assets/cloud_double.png"
@@ -360,11 +362,15 @@ isCastle gs =
 draw :: Sprites -> GS -> IO Picture
 draw spr gs
   | gPhase gs == LevelIntro = return (drawLevelIntro spr gs)
+  | gPhase gs == PipeEntry  = return $ pictures
+      [ drawSkyFor gs
+      , translate (-(gCam gs)) worldYOffset world
+      , drawHUD gs
+      ]
   | otherwise = return $ pictures
       [ drawSkyFor gs
       , translate (-(gCam gs)) worldYOffset world
       , if underwater then drawWaveStrip spr gs else blank
-      -- Mario is drawn after the wave strip so he appears in front of it.
       , translate (-(gCam gs)) worldYOffset (drawMario spr (gMario gs))
       , drawHUD gs
       , drawOverlay gs
@@ -384,8 +390,9 @@ draw spr gs
       , if castle then drawLava spr (gTiles gs) else blank
       -- Piranhas behind all tiles
       , drawEnem    spr underground clock (filter isPiranha (gEnem gs))
-      , drawTilesOfType spr underground underwater castle clock flagOff isGround      anims (gTiles gs)
-      , drawTilesOfType spr underground underwater castle clock flagOff (not.isGround) anims (gTiles gs)
+      , if isPipeEntry then drawMarioPipeClipped spr gs else blank
+      , drawTilesOfType spr underground underwater castle clock flagOff isPipeEntry isGround      anims (gTiles gs)
+      , drawTilesOfType spr underground underwater castle clock flagOff isPipeEntry (\t -> not (isGround t) && not (isPipeEntry && tType t == Step)) anims (gTiles gs)
       , drawBrickAnims  spr underground clock anims
       , if underwater then drawCoralTiles spr (gTiles gs) else blank
       -- Bridge rendered over floor tiles at Bowser's pit
@@ -400,10 +407,11 @@ draw spr gs
       , drawFirebars spr clock (gFirebars gs)
       , drawPlayerFireballs spr clock (mJoeMode (gMario gs)) (gFireballs gs)
       , drawEnem    spr underground clock (filter (not . isPiranha) (gEnem gs))
-      , drawMario   spr       (gMario gs)
+      , if isPipeEntry then blank else drawMario spr (gMario gs)
       ]
     anims   = gBrickAnims gs
     flagOff = gFlagOffset gs
+    isPipeEntry = gPhase gs == PipeEntry
 
 -- | Tile water.png across the top of the screen in screen space.
 -- The real NES game has a ~2-tile (64px) blue sky strip above the wave.
@@ -426,6 +434,9 @@ isGround :: Tile -> Bool
 isGround t = tType t == Ground
 
 -- ─── Mario ────────────────────────────────────────────────────────────────────
+
+drawMarioPipeClipped :: Sprites -> GS -> Picture
+drawMarioPipeClipped spr gs = drawMario spr (gMario gs)
 
 marioScale :: Float
 marioScale = 1.0
@@ -754,16 +765,16 @@ drawBush spr (c, isTriple) =
 tileScale :: Float
 tileScale = ts / 48
 
-drawTiles :: Sprites -> Bool -> Bool -> Bool -> Float -> Float -> [BrickAnim] -> [Tile] -> Picture
-drawTiles spr ug uw castle clock flagOff anims ts_ =
-  pictures (map (drawTile spr ug uw castle clock flagOff anims) ts_)
+drawTiles :: Sprites -> Bool -> Bool -> Bool -> Float -> Float -> Bool -> [BrickAnim] -> [Tile] -> Picture
+drawTiles spr ug uw castle clock flagOff isPipeEntry anims ts_ =
+  pictures (map (drawTile spr ug uw castle clock flagOff isPipeEntry anims) ts_)
 
-drawTilesOfType :: Sprites -> Bool -> Bool -> Bool -> Float -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
-drawTilesOfType spr ug uw castle clock flagOff p anims ts_ =
-  pictures (map (drawTile spr ug uw castle clock flagOff anims) (filter p ts_))
+drawTilesOfType :: Sprites -> Bool -> Bool -> Bool -> Float -> Float -> Bool -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
+drawTilesOfType spr ug uw castle clock flagOff isPipeEntry p anims ts_ =
+  pictures (map (drawTile spr ug uw castle clock flagOff isPipeEntry anims) (filter p ts_))
 
-drawTile :: Sprites -> Bool -> Bool -> Bool -> Float -> Float -> [BrickAnim] -> Tile -> Picture
-drawTile spr ug uw castle clock flagOff anims t = translate tx (ty + bump) pic
+drawTile :: Sprites -> Bool -> Bool -> Bool -> Float -> Float -> Bool -> [BrickAnim] -> Tile -> Picture
+drawTile spr ug uw castle clock flagOff isPipeEntry anims t = translate tx (ty + bump) pic
   where
     tx   = fromIntegral (tCol t) * ts + ts/2
     ty   = fromIntegral (tRow t) * ts + ts/2
@@ -792,11 +803,14 @@ drawTile spr ug uw castle clock flagOff anims t = translate tx (ty + bump) pic
       FirebarTile -> emptyPic
       Coral       -> blank
       PipeTop     ->
-        let h       = fromIntegral (tRow t) :: Float
-            scaleX  = 2 * ts / 48
-            scaleY  = h * ts / 96
-            offsetY = ts * (1 - h) / 2
-        in translate (ts/2) offsetY $ scale scaleX scaleY (spPipe spr)
+        if isPipeEntry
+          then translate (ts/2) (ts * 1.5) (scale 2 2 (spPipe90 spr))
+          else
+            let h       = fromIntegral (tRow t) :: Float
+                scaleX  = 2 * ts / 48
+                scaleY  = h * ts / 96
+                offsetY = ts * (1 - h) / 2
+            in translate (ts/2) offsetY $ scale scaleX scaleY (spPipe spr)
       Pipe        -> blank
       PipeR       -> blank
       FlagPole    -> blank   -- drawn by drawFlagpoles pass
@@ -1180,7 +1194,7 @@ drawHUD :: GS -> Picture
 drawHUD gs =
   let currentLevel = gLevels gs !! gLevelIdx gs
       worldNum  = lWorld currentLevel
-      lvlNum    = lNumber currentLevel
+      lvlNum    = if lNumber currentLevel == 0 then 2 else lNumber currentLevel
       timerVal  = floor (gTimer gs) :: Int
       -- Timer turns red when below 100 (NES urgency cue)
       timerColor = if timerVal < 100 then red else white
@@ -1206,7 +1220,9 @@ drawLevelIntro :: Sprites -> GS -> Picture
 drawLevelIntro spr gs =
   let currentLevel = gLevels gs !! gLevelIdx gs
       joe       = mJoeMode (gMario gs)
-      worldStr  = "WORLD " ++ show (lWorld currentLevel) ++ "-" ++ show (lNumber currentLevel)
+      -- The intro cutscene level uses lNumber=0 internally; display "1-2" instead.
+      displayNum = if lNumber currentLevel == 0 then 2 else lNumber currentLevel
+      worldStr  = "WORLD " ++ show (lWorld currentLevel) ++ "-" ++ show displayNum
       nameStr   = if joe then "JOE" else "MARIO"
 
       -- Standing sprite matching current power-up and Joe state.
@@ -1265,6 +1281,7 @@ drawOverlay :: GS -> Picture
 drawOverlay gs = case gPhase gs of
   LevelIntro    -> blank   -- handled by drawLevelIntro via the draw short-circuit
   Play          -> blank
+  PipeEntry     -> blank
   CastleComplete -> blank
   Over          -> mkOv (dark red)                 "GAME OVER" ("Lives: " ++ show (gLives gs))
   Win           -> mkOv (makeColorI 255 215 0 255) "YOU WIN!"  ("Score: " ++ show (gScore gs))

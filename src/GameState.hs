@@ -36,6 +36,7 @@ initGS =
         , gFlagTimer  = 0
         , gDeathTimer = 0
         , gFreezeTimer = 0
+        , gPipeTimer   = 0
         }
 
 loadLevel :: Int -> GS -> GS
@@ -60,6 +61,7 @@ loadLevel idx gs
             , gKeys       = KS False False False False False
             , gDeathTimer = 0
             , gFreezeTimer = 0
+            , gPipeTimer   = 0
             }
   | otherwise = gs
 
@@ -113,18 +115,80 @@ isUnderwaterGS gs =
   in isUnderwaterLevel lvl
 
 -- | Brief world screen before every level and respawn.
+--   For the 1-2 intro level (lNumber == 0) the black screen shows "WORLD 1-2"
+--   (fixed in Rendering), waits 2 seconds, then transitions to PipeEntry.
 stepLevelIntro :: Float -> GS -> GS
 stepLevelIntro dt gs =
-  let t = gFlagTimer gs + dt
+  let t            = gFlagTimer gs + dt
+      currentLevel = gLevels gs !! gLevelIdx gs
+      isIntroLevel = lNumber currentLevel == 0
   in if t >= 2.0
-       then gs { gPhase = Play, gFlagTimer = 0 }
+       then if isIntroLevel
+              then gs { gPhase     = PipeEntry
+                      , gFlagTimer = mX (gMario gs)
+                      , gPipeTimer = 0
+                      }
+              else gs { gPhase = Play, gFlagTimer = 0 }
        else gs { gFlagTimer = t }
+
+-- | Pipe-entry cutscene: Mario auto-walks to the entry pipe and stops.
+--   The pipe sprite is drawn on top of him so he appears to disappear into it.
+--   After a 2-second pause the level advances to 1-2.
+--
+--   Timeline (gPipeTimer):
+--     0 .. walkEnd        Mario walks right at 80 px/s to pipe centre.
+--     walkEnd .. totalEnd 2-second pause (Mario hidden behind pipe).
+--     totalEnd+           Advance to the real underground 1-2.
+stepPipeEntry :: Float -> GS -> GS
+stepPipeEntry dt gs =
+  let t     = gPipeTimer gs + dt
+      m     = gMario gs
+
+      pipeCX =
+        case [ fromIntegral (tCol ti) * ts + ts / 2
+             | ti <- gTiles gs, tType ti == PipeTop ] of
+          (x:_) -> x
+          []    -> gFlagTimer gs + ts * 8
+
+      startX    = gFlagTimer gs
+      walkSpeed = 80 :: Float
+      walkDist  = max 0 (pipeCX - startX)
+      walkEnd   = walkDist / walkSpeed
+
+      pauseDuration = 2.0 :: Float
+      totalEnd      = walkEnd + pauseDuration
+
+      groundY =
+        case mState m of
+          Small -> ts * 1.5
+          _     -> ts * 2
+
+      mUpdated
+        | t <= walkEnd =
+            let newX = min pipeCX (startX + walkSpeed * t)
+            in m { mX      = newX
+                 , mY      = groundY
+                 , mVX     = walkSpeed
+                 , mVY     = 0
+                 , mGround = True
+                 , mFace   = 1
+                 , mSliding = False
+                 , mAnim   = mAnim m + dt
+                 }
+        | otherwise = m { mVX = 0, mGround = True, mY = groundY }
+
+  in if t >= totalEnd
+       then advanceToNextLevel gs { gPipeTimer = 0, gFlagTimer = 0 }
+       else gs { gMario     = mUpdated
+               , gPipeTimer = t
+               }
 
 step :: Float -> GS -> GS
 step dt gs
   | gPhase gs == LevelIntro           = stepLevelIntro dt gs
   | gPhase gs == LevelComplete        = stepFlagAnim dt gs
   | gPhase gs == CastleComplete       = stepCastleComplete dt gs
+  | gPhase gs == PipeEntry            = stepPipeEntry dt gs
   | gPhase gs /= Play                 = gs
   | mState (gMario gs) == MDead       = stepDeath dt gs
   | gFreezeTimer gs > 0               = stepFreeze dt gs
@@ -406,6 +470,7 @@ stepDeath dt gs =
                , gKeys       = KS False False False False False
                , gDeathTimer = 0
                , gFreezeTimer = 0
+               , gPipeTimer   = 0
                }
        else gs { gMario = mMoved, gDeathTimer = newDeathTimer }
 
@@ -474,11 +539,10 @@ stepFlagAnim dt gs =
       slideSpeed = flagSpeed
 
       -- Ground Y: Mario's centre Y when standing on the ground surface.
-      -- Ground surface = top of row-0 tile = ts = 32.
-      -- Small Mario half-height = ts/2, Big/Fire = ts. Add a few px so feet sit on top.
+      -- Ground Y matches lStartY: ts*1.5 for Small, ts*2 for Big/Fire.
       groundY = case mState m of
-                  Small -> ts + ts / 2 + 8    -- = 56
-                  _     -> ts + ts + 8        -- = 72
+                  Small -> ts * 1.5
+                  _     -> ts * 2
 
       -- Phase 1: slide DOWN the pole.
       -- Y decreases toward groundY; clamp with max (stop when Y reaches groundY).
@@ -533,7 +597,10 @@ initMarioForNextLevel lvl oldMario =
 
 advanceToNextLevel :: GS -> GS
 advanceToNextLevel gs =
-  let nextIdx = gLevelIdx gs + 1
+  let nextIdx      = gLevelIdx gs + 1
+      currentLevel = gLevels gs !! gLevelIdx gs
+      -- When coming from the pipe-entry intro level, skip the black screen.
+      skipIntro    = lNumber currentLevel == 0
   in if nextIdx < length (gLevels gs)
        then
          let nextLvl = gLevels gs !! nextIdx
@@ -545,7 +612,7 @@ advanceToNextLevel gs =
                , gFirebars   = lFirebars nextLvl
                , gFireballs  = []
                , gCam        = fromIntegral sW / 2
-               , gPhase      = LevelIntro
+               , gPhase      = if skipIntro then Play else LevelIntro
                , gLevelIdx   = nextIdx
                , gTimer      = 400
                , gBrickAnims = []
@@ -555,13 +622,23 @@ advanceToNextLevel gs =
                , gKeys       = KS False False False False False
                , gDeathTimer = 0
                , gFreezeTimer = 0
+               , gPipeTimer   = 0
                }
        else gs { gPhase = Win }
 
 handleEv :: Event -> GS -> GS
 handleEv (EventKey (Char 'r') Down _ _) _ = initGS
 handleEv (EventKey (Char d) Down _ _) gs
-  | d >= '1' && d <= '8' = loadLevel (fromEnum d - fromEnum '1') gs
+  | d >= '1' && d <= '8' =
+      -- Index 1 is level1_2_intro (the pipe-entry cutscene), which should only
+      -- be reached naturally via level progression, never by direct key select.
+      -- Keys 2–8 are therefore shifted up by one to skip it.
+      -- Index 1 is level1_2_intro (the pipe-entry cutscene).
+      -- Key '2' loads it so the cutscene plays; keys '3'-'8' are
+      -- shifted up by one to skip past it to the real levels.
+      let idx = fromEnum d - fromEnum '1'
+          idx' = if idx >= 2 then idx + 1 else idx
+      in loadLevel idx' gs
 handleEv _ gs | gPhase gs /= Play = gs
 handleEv ev gs = case ev of
   EventKey k Down _ _ ->

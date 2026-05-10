@@ -5,6 +5,7 @@ module Music
   , selectTrack
   , switchIfNeeded
   , switchIfNotBlocked
+  , restartTrack
   , stopMusic
   ) where
 
@@ -77,6 +78,15 @@ switchIfNeeded ref wanted = do
       stopCurrent ms
       h <- startTrack wanted
       writeIORef ref MusicState { msCurrentTrack = wanted, msHandle = h }
+
+-- | Stop whatever is playing and start 'wanted' from the beginning,
+--   even if it is the same track. Used when switching levels explicitly.
+restartTrack :: IORef MusicState -> TrackId -> IO ()
+restartTrack ref wanted = do
+  ms <- readIORef ref
+  stopCurrent ms
+  h <- startTrack wanted
+  writeIORef ref MusicState { msCurrentTrack = wanted, msHandle = h }
 
 -- | Like 'switchIfNeeded', but when the desired track is 'TLevelComplete'
 --   the switch is held off until 'blockerRef' contains Nothing or a finished

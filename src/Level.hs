@@ -265,7 +265,7 @@ level1_1 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (198*ts) 1 1
 --------------------------------------------------------------------------------
 
 level1_2 :: Level
-level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*1.5) (200*ts) 1 2
+level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*8) (200*ts) 1 2
   where
     -- ── Ground with pits ──────────────────────────────────────────────────
     -- Pits confirmed pixel-accurate: rows 0 and -1 both empty.
@@ -1155,10 +1155,38 @@ level2_4 = mkLevel tiles enemies coins [] firebars [] (ts*3) (ts*1.5) (148*ts) 2
       , (110,3),(118,3),(126,3)
       ]
 --------------------------------------------------------------------------------
+-- World 1-2 intro (above-ground pipe-entry cutscene)
+-- A short above-ground scene: castle on the left, ground, a staircase of
+-- stepping bricks, then the entry pipe Mario walks into.
+-- lWorld=1, lNumber=0  =>  selectTrack returns TOverworld (correct).
+-- Mario starts just right of the castle at col 6, ground level.
+-- The entry pipe is at col 11 (2 tiles tall, 90-degree style).
+-- lEndX is set far away — the level ends only via the PipeEntry cutscene.
+--------------------------------------------------------------------------------
+
+level1_2_intro :: Level
+level1_2_intro = mkLevel tiles [] [] [] [] [] (ts*6) (ts*1.5) (9999*ts) 1 0
+  where
+    ground = mkGround 0 20
+
+    -- Castle flush against the left edge (cols 0–4, rows 0–5)
+    castle = mkCastle 0
+
+    -- Stepping bricks: a small ascending staircase (cols 8–10)
+    steps =  [Tile 8  1 Step]
+          ++ [Tile 9  r Step | r <- [1,2]]
+          ++ [Tile 10 r Step | r <- [1,2,3]]
+
+    -- Entry pipe at col 11, height 2
+    entryPipe = mkPipe 11 2
+
+    tiles = ground ++ castle ++ steps ++ entryPipe
+
+--------------------------------------------------------------------------------
 -- All levels exported
 --------------------------------------------------------------------------------
 
 allLevels :: [Level]
-allLevels = [ level1_1, level1_2, level1_3, level1_4
+allLevels = [ level1_1, level1_2_intro, level1_2, level1_3, level1_4
             , level2_1, level2_2, level2_3, level2_4
             ]

@@ -72,7 +72,7 @@ data Fireball = Fireball
 
 data KS = KS { kL, kR, kJ, kRun, kD :: Bool } deriving Show
 
-data Phase = LevelIntro | Play | Over | Win | LevelComplete | CastleComplete deriving (Eq, Show)
+data Phase = LevelIntro | Play | Over | Win | LevelComplete | CastleComplete | PipeEntry deriving (Eq, Show)
 
 -- | A transient block animation.
 --   BumpAnim  col row timer  — block bounces up (timer counts down from ~0.12s)
@@ -140,6 +140,7 @@ data GS = GS
   , gFlagTimer  :: Float   -- countdown after flag fully lowered before advancing
   , gDeathTimer :: Float   -- time elapsed since Mario died (for death jingle)
   , gFreezeTimer :: Float  -- world is frozen while Mario transforms (>0 = frozen)
+  , gPipeTimer  :: Float   -- counts up during PipeEntry cutscene
   } deriving Show
 
 type BB = (Float,Float,Float,Float)

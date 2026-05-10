@@ -9,6 +9,7 @@ module Sound
 import System.Process (spawnProcess, ProcessHandle)
 import System.IO.Error (catchIOError)
 import Types
+import Constants (ts)
 
 -- ---------------------------------------------------------------------------
 -- Sound event sum type
@@ -75,6 +76,7 @@ detectSoundEvents old new = concat
   [ detectGameOver       old new
   , detectFlagpole       old new
   , detectPipeDown       old new
+  , detectPipeEntry      old new
   , detectBowserFall     old new
   , detectStomp          old new
   , detectKickShell      old new
@@ -111,6 +113,23 @@ detectPipeDown old new =
         || (mState mOld == Big   && mState mNew == Small)
         || (mState mOld /= MDead && mState mNew == MDead)
   in if downgraded && mInv mNew > 0 then [SfxPipeTravelDown] else []
+
+-- | Fire the pipe-travel sound when Mario starts sinking into the pipe
+--   (gPipeTimer crosses walkEnd), not at the start of the walk.
+detectPipeEntry :: GS -> GS -> [SoundEvent]
+detectPipeEntry old new
+  | gPhase old /= PipeEntry || gPhase new /= PipeEntry = []
+  | otherwise =
+      let pipeCX =
+            case [ fromIntegral (tCol ti) * ts + ts / 2
+                 | ti <- gTiles old, tType ti == PipeTop ] of
+              (x:_) -> x
+              []    -> gFlagTimer old + ts * 8
+          startX   = gFlagTimer old
+          walkEnd  = max 0 (pipeCX - startX) / 80
+      in if gPipeTimer old < walkEnd && gPipeTimer new >= walkEnd
+           then [SfxPipeTravelDown]
+           else []
 
 -- | Bowser fall: a Bowser enemy just transitioned to EFallDead.
 detectBowserFall :: GS -> GS -> [SoundEvent]
