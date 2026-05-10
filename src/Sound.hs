@@ -159,16 +159,15 @@ detectPowerUpAppears old new
   | length (gPups new) > length (gPups old) = [SfxPowerUpAppears]
   | otherwise                               = []
 
--- | Power-up collected: Mario's state just upgraded.
+-- | Power-up collected: Mario's transform timer just started (the moment he
+--   touches the power-up), so the sound fires immediately rather than waiting
+--   for the flash to finish.
 detectPowerUp :: GS -> GS -> [SoundEvent]
 detectPowerUp old new =
   let mOld = gMario old
       mNew  = gMario new
-      upgraded =
-           (mState mOld == Small && mState mNew == Big)
-        || (mState mOld == Big   && mState mNew == Fire)
-        || (mState mOld == Small && mState mNew == Fire)
-  in if upgraded then [SfxPowerUpTaken] else []
+      justStarted = mTransformTimer mOld <= 0 && mTransformTimer mNew > 0
+  in if justStarted then [SfxPowerUpTaken] else []
 
 detectOneUp :: GS -> GS -> [SoundEvent]
 detectOneUp old new

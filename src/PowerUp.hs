@@ -23,7 +23,7 @@ bumpBlocks m vy tls pus sc
         QBlock content ->
           let tls2  = map (\x -> if samePos x t then x { tType = Used } else x) tls
               bx    = fromIntegral (tCol t) * ts
-              by    = fromIntegral (tRow t + 1) * ts + ts * 0.5
+              by    = fromIntegral (tRow t + 1) * ts + ts * 1.6
               bump  = BumpAnim (tCol t) (tRow t) 0.12
               coinPop = CoinPopAnim (fromIntegral (tCol t) * ts + ts/2)
                                     (fromIntegral (tRow t + 1) * ts)
@@ -36,7 +36,7 @@ bumpBlocks m vy tls pus sc
                  -- Small Mario gets Mushroom; Big/Fire gets Fire Flower
                  let pType = if mState m == Small then Mushroom else FireFlower
                      initVX = if pType == FireFlower then 0 else 80
-                     pu0   = PUp bx by initVX 120 True pType
+                     pu0   = PUp bx by initVX 0 True pType
                  in (tls2, pu0:pus, sc + 50, [bump], False)
         Brick | mState m == Big || mState m == Fire ->
           let tls2  = filter (\x -> not (samePos x t)) tls
@@ -122,9 +122,16 @@ grabPups m ps sc = foldr go (m,[],sc) ps
     pupBB p = (pX p + ts/2, pY p, ts*0.85, ts*0.85)
 
 applyPup :: PUpType -> Mario -> Mario
-applyPup Mushroom   m = m { mState = if mState m == Small then Big  else mState m }
-applyPup FireFlower m = m { mState = nextFireState (mState m) }
-applyPup Star       m = m { mState = if mState m == Small then Big  else mState m }
+applyPup Mushroom   m = startTransform (nextFireState (mState m)) m
+applyPup FireFlower m = startTransform (nextFireState (mState m)) m
+applyPup Star       m = startTransform (nextFireState (mState m)) m
+
+-- | Begin a power-up transformation flash instead of instantly changing state.
+--   If Mario is already at the target state (e.g. Fire + FireFlower), do nothing.
+startTransform :: MS -> Mario -> Mario
+startTransform newState m
+  | newState == mState m = m
+  | otherwise = m { mTransformTimer = 0.8, mTransformTarget = newState }
 
 nextFireState :: MS -> MS
 nextFireState Small = Big

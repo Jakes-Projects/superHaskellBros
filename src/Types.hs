@@ -55,8 +55,10 @@ data Mario = Mario
   , mJoeBuffer  :: String  -- tracks recent keypresses for "joe" detection
   , mSwimAnim   :: Int     -- swim animation frame (0-4), advances each stroke
   , mSwimming   :: Bool    -- True when swim button is held
-  , mSliding    :: Bool    -- True while sliding down the end-of-level flagpole
-  , mSkidding   :: Bool    -- True while braking hard (opposite direction input)
+  , mSliding         :: Bool    -- True while sliding down the end-of-level flagpole
+  , mSkidding        :: Bool    -- True while braking hard (opposite direction input)
+  , mTransformTimer  :: Float   -- counts down during power-up flash (0 = not transforming)
+  , mTransformTarget :: MS      -- the state to transition INTO after the flash
   } deriving Show
 
 -- | A fireball shot by Fire Mario.
@@ -137,6 +139,7 @@ data GS = GS
   , gFlagOffset :: Float   -- how far the flag has slid down the pole (0 = top)
   , gFlagTimer  :: Float   -- countdown after flag fully lowered before advancing
   , gDeathTimer :: Float   -- time elapsed since Mario died (for death jingle)
+  , gFreezeTimer :: Float  -- world is frozen while Mario transforms (>0 = frozen)
   } deriving Show
 
 type BB = (Float,Float,Float,Float)

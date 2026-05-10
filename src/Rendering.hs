@@ -358,15 +358,17 @@ isCastle gs =
   in lNumber lvl == 4
 
 draw :: Sprites -> GS -> IO Picture
-draw spr gs = return $ pictures
-  [ drawSkyFor gs
-  , translate (-(gCam gs)) worldYOffset world
-  , if underwater then drawWaveStrip spr gs else blank
-  -- Mario is drawn after the wave strip so he appears in front of it.
-  , translate (-(gCam gs)) worldYOffset (drawMario spr (gMario gs))
-  , drawHUD gs
-  , drawOverlay gs
-  ]
+draw spr gs
+  | gPhase gs == LevelIntro = return (drawLevelIntro spr gs)
+  | otherwise = return $ pictures
+      [ drawSkyFor gs
+      , translate (-(gCam gs)) worldYOffset world
+      , if underwater then drawWaveStrip spr gs else blank
+      -- Mario is drawn after the wave strip so he appears in front of it.
+      , translate (-(gCam gs)) worldYOffset (drawMario spr (gMario gs))
+      , drawHUD gs
+      , drawOverlay gs
+      ]
   where
     underwater  = isUnderwater gs
     underground = isUnderground gs || underwater
@@ -431,20 +433,37 @@ marioScale = 1.0
 drawMario :: Sprites -> Mario -> Picture
 drawMario spr m
   | mState m == MDead =
-      translate (mX m) (mY m)
+      translate (mX m) (mY m + 8)
         $ scale marioScale marioScale
         $ spMarioDeath spr
   | blink = blank
   | otherwise =
       translate (mX m) drawY
         $ scale (marioScale * fromIntegral (if mSkidding m then -(mFace m) else mFace m)) marioScale
-        $ pickMarioFrame spr m
+        $ pickMarioFrame spr flashM
   where
     blink  = mInv m > 1.0 && even (floor (mInv m * 10) :: Int)
-    -- When crouching, Big/Fire Mario's BB shrinks to small height (ts instead of ts*2).
-    -- The physics center mY stays put, so the sprite floats ts/2 above the ground.
-    -- Shift the sprite down by ts/2 to keep the feet at the correct world position.
-    drawY  = if mCrouch m then mY m - ts/2 else mY m
+    -- During power-up transformation: alternate between current and target sprite
+    -- at ~12 Hz to produce the classic NES palette-flash effect.
+    transforming = mTransformTimer m > 0
+    flashM
+      | transforming && odd (floor (mTransformTimer m * 12) :: Int)
+          = m { mState = mTransformTarget m }
+      | otherwise = m
+    -- mY is the physics centre (halfH above the bottom edge).
+    -- Sprites are taller than the BB, so we shift up to align the sprite bottom
+    -- with the physics bottom edge:
+    --   Small Mario: sprite 48px, half=24; BB half=ts/2=16 → shift up by 8
+    --   Big/Fire/Joe: sprite 96px, half=48; BB half=ts=32  → shift up by 16
+    -- Crouching collapses Big/Fire BB to small height, so subtract ts/2 on top.
+    -- Use target state for the sprite shift so position doesn't jitter during flash
+    shiftState = if transforming then mTransformTarget m else mState m
+    spriteShift = case shiftState of
+                    Small -> 8
+                    _     -> 16
+    drawY = if mCrouch m
+              then mY m - ts/2 + spriteShift
+              else mY m + spriteShift
 
 pickMarioFrame :: Sprites -> Mario -> Picture
 pickMarioFrame spr m
@@ -550,11 +569,16 @@ drawE spr ug clock e = case eState e of
     if shouldDrawAlive e
       then case eType e of
         Piranha -> translate cx (eY e + 36) (drawEnemyBody spr ug clock e)
+        Koopa   -> translate cx (eY e + koopaBodyHalf) (drawEnemyBody spr ug clock e)
         _       -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
       else blank
   where
     cx = eX e + ts/2
+    -- Goomba sprite: 48px tall, half=24 → spriteHalf=24 is correct.
+    -- Koopa body sprite: 72px tall, half=36 → needs its own offset.
+    -- Koopa shell sprite: 48px tall, half=24 → same as goomba, correct.
     spriteHalf = 24
+    koopaBodyHalf = 36
 
     shellPic timer moving
       | moving       = if ug then spUgKoopaShell spr     else spKoopaShell spr
@@ -813,7 +837,7 @@ bumpOffset :: [BrickAnim] -> Tile -> Float
 bumpOffset anims t = case filter isBump anims of
     (BumpAnim _ _ timeLeft : _) ->
       let progress = 1.0 - (timeLeft / 0.12)
-      in sin (pi * progress) * 8.0
+      in sin (pi * progress) * 4.0
     _ -> 0.0
   where
     isBump (BumpAnim c r _) = c == tCol t && r == tRow t
@@ -882,18 +906,17 @@ drawFlagpoles spr flagOff tiles = pictures (map drawOnePole poleColumns)
 
     sc = ts / 48   -- uniform scale: 48px wide → 32px
 
-    -- Pole bottom edge = bottom of row-1 tile = row1Centre - ts/2 = ts - ts/2 = ts/2 = 16
-    -- Pole top edge    = top of row-10 tile   = row10Centre + ts/2 = 10*ts+ts/2+ts/2 = 11*ts = 352
-    -- But rendered sprite is 320px tall (480 * 2/3). Anchor bottom to Y=16, so centre at 16+160=176.
-    poleBottomY = ts / 2                    -- = 16  (bottom of row-1 tile)
+    -- Pole bottom edge sits on the ground surface (top of row-0 tile = ts = 32).
+    -- Rendered sprite is 320px tall (480 * 2/3). Centre = 32 + 160 = 192.
+    poleBottomY = ts                        -- = 32  (ground surface)
     spriteHalfH = (480 * sc) / 2           -- = 160
-    poleCentreY = poleBottomY + spriteHalfH -- = 176
+    poleCentreY = poleBottomY + spriteHalfH -- = 192
 
-    -- Flag starts at the pole top. Pole top ≈ poleBottomY + 480*sc = 16 + 320 = 336.
-    -- Flag centre = poleTop - flagHalf = 336 - 18 = 318. Slides DOWN by flagOff.
+    -- Flag starts at the pole top. Pole top = poleBottomY + 480*sc = 32 + 320 = 352.
+    -- Flag centre = poleTop - flagHalf = 352 - 18 = 334. Slides DOWN by flagOff.
     -- Floor: flag bottom at ground surface (Y=32), so flag centre floor = 32 + 18 = 50.
-    poleTopY      = poleBottomY + 480 * sc  -- = 336
-    flagStartY    = poleTopY - 18           -- = 318 (flag centre at pole top)
+    poleTopY      = poleBottomY + 480 * sc  -- = 352
+    flagStartY    = poleTopY - 18           -- = 334 (flag centre at pole top)
 
     drawOnePole c =
       let poleX    = fromIntegral c * ts + ts / 2
@@ -1174,9 +1197,73 @@ drawHUD gs =
        , hudValue white  (zeroPad 2 (gLives gs))                   (hudCol 4)
        ]
 
+-- | Full-screen black intro shown before every level and after every death.
+--   Layout (matching original SMB):
+--     HUD bar at top (score / world / time)
+--     "WORLD X-Y"  centred
+--     [sprite]  x  NN   — sprite sits inline to the left of the x
+drawLevelIntro :: Sprites -> GS -> Picture
+drawLevelIntro spr gs =
+  let currentLevel = gLevels gs !! gLevelIdx gs
+      joe       = mJoeMode (gMario gs)
+      worldStr  = "WORLD " ++ show (lWorld currentLevel) ++ "-" ++ show (lNumber currentLevel)
+      nameStr   = if joe then "JOE" else "MARIO"
+
+      -- Standing sprite matching current power-up and Joe state.
+      marioSprite = case mState (gMario gs) of
+                      Big  -> spBigStand  spr
+                      Fire -> if joe then spJoeStand spr else spFireStand spr
+                      _    -> spMarioStand spr
+
+      -- Chunky outlined font: draw in black at 8 surrounding offsets, white on top.
+      introScale = 0.20
+      outlinePx  = 1.5
+      offsets    = [ (dx, dy) | dx <- [-outlinePx, 0, outlinePx]
+                               , dy <- [-outlinePx, 0, outlinePx]
+                               , (dx, dy) /= (0, 0) ]
+
+      -- Gloss stroke font: ~104 units wide per char at scale 1.0.
+      charW     = introScale * 104
+      centreX s = -(fromIntegral (length s) * charW / 2)
+
+      introLine s y =
+        let cx     = centreX s
+            rawTxt = scale introScale introScale (text s)
+        in pictures $
+             [ translate (cx + dx) (y + dy) (color black rawTxt) | (dx, dy) <- offsets ]
+             ++ [ translate cx y (color white rawTxt) ]
+
+      -- ── Inline sprite row: [sprite]  x  NN ─────────────────────────────
+      afterSpriteStr = "x  " ++ zeroPad 2 (gLives gs)
+      spriteW        = ts
+      gapSprTxt      = charW
+      afterW         = fromIntegral (length afterSpriteStr) * charW
+      rowW           = spriteW + gapSprTxt + afterW
+      rowLeft        = -(rowW / 2)
+
+      livesRowY      = -40
+      spriteX        = rowLeft + spriteW / 2
+      textX          = rowLeft + spriteW + gapSprTxt
+      textY          = livesRowY - 10
+
+      livesRow =
+        let rawTxt = scale introScale introScale (text afterSpriteStr)
+        in pictures $
+             [ translate (textX + dx) (textY + dy) (color black rawTxt) | (dx, dy) <- offsets ]
+             ++ [ translate textX textY (color white rawTxt)
+                , translate spriteX livesRowY marioSprite
+                ]
+
+  in pictures
+       [ color black (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+       , drawHUD gs
+       , introLine worldStr 30
+       , livesRow
+       ]
+
 drawOverlay :: GS -> Picture
 drawOverlay gs = case gPhase gs of
-  LevelIntro    -> mkOv white worldText ("MARIO x" ++ zeroPad 2 (gLives gs))
+  LevelIntro    -> blank   -- handled by drawLevelIntro via the draw short-circuit
   Play          -> blank
   CastleComplete -> blank
   Over          -> mkOv (dark red)                 "GAME OVER" ("Lives: " ++ show (gLives gs))
@@ -1184,7 +1271,6 @@ drawOverlay gs = case gPhase gs of
   LevelComplete -> blank
   where
     currentLevel = gLevels gs !! gLevelIdx gs
-    worldText = "WORLD " ++ show (lWorld currentLevel) ++ "-" ++ show (lNumber currentLevel)
 
     mkOv c t1 t2 = pictures
       [ color (withAlpha 0.65 black) (rectangleSolid 900 700)

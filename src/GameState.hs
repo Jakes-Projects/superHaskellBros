@@ -35,6 +35,7 @@ initGS =
         , gFlagOffset = 0
         , gFlagTimer  = 0
         , gDeathTimer = 0
+        , gFreezeTimer = 0
         }
 
 loadLevel :: Int -> GS -> GS
@@ -58,6 +59,7 @@ loadLevel idx gs
             , gFlagTimer  = 0
             , gKeys       = KS False False False False False
             , gDeathTimer = 0
+            , gFreezeTimer = 0
             }
   | otherwise = gs
 
@@ -125,6 +127,7 @@ step dt gs
   | gPhase gs == CastleComplete       = stepCastleComplete dt gs
   | gPhase gs /= Play                 = gs
   | mState (gMario gs) == MDead       = stepDeath dt gs
+  | gFreezeTimer gs > 0               = stepFreeze dt gs
   | otherwise                         = gs'
   where
     ks  = gKeys gs
@@ -167,17 +170,26 @@ step dt gs
         then m1
         else resolvePlatforms newPlats m1
 
-    -- Decrement timers
+    -- Decrement timers; commit power-up transformation when flash timer expires
     swimStroke  = underwater && kJ ks
     newSwimAnim = if swimStroke then (mSwimAnim m1p + 1) `mod` 5 else mSwimAnim m1p
 
-    m2 = m1p { mAnim     = mAnim m1p + dt
-              , mInv      = max 0 (mInv m1p - dt)
-              , mFireCool = max 0 (mFireCool m1p - dt)
-              , mJoeMode  = mJoeMode m1p && mState m1p == Fire
-              , mSwimAnim = newSwimAnim
-              , mSwimming = swimStroke
-              }
+    transformTick =
+      let t = mTransformTimer m1p - dt
+      in if mTransformTimer m1p > 0
+           then if t <= 0
+                  then m1p { mTransformTimer = 0
+                           , mState          = mTransformTarget m1p }
+                  else m1p { mTransformTimer = t }
+           else m1p
+
+    m2 = transformTick { mAnim     = mAnim m1p + dt
+                       , mInv      = max 0 (mInv m1p - dt)
+                       , mFireCool = max 0 (mFireCool m1p - dt)
+                       , mJoeMode  = mJoeMode m1p && mState m1p == Fire
+                       , mSwimAnim = newSwimAnim
+                       , mSwimming = swimStroke
+                       }
 
     cam = max (gCam gs) (max (fromIntegral sW / 2) (mX m2))
 
@@ -198,6 +210,11 @@ step dt gs
     pu1' = knockPupsFromBumps newAnims pu1
     pu2 = map (stepPup dt (filter (solid . tType) ts2)) pu1'
     (m4, pu3, sc4) = grabPups m3' pu2 sc3
+
+    -- If grabbing a power-up started a transformation, freeze the world.
+    -- mTransformTimer will be > 0 on m4 but was 0 on m3'.
+    justStartedTransform = mTransformTimer m4 > 0 && mTransformTimer m3' <= 0
+    newFreezeTimer = if justStartedTransform then mTransformTimer m4 else 0
 
     -- ── Coin counter & 1-up ──────────────────────────────────────────────
     prevCollected  = length (filter (\(_,_,c) -> c) (gCoins gs))
@@ -332,7 +349,7 @@ step dt gs
                 , gCam        = cam
                 , gPhase      = ph2
                 , gFirebars   = fb_stepped
-                , gFireballs  = fb4
+                , gFireballs  = if ph2 == LevelComplete then [] else fb4
                 , gTimer      = newTimer
                 , gCoinCount  = newCoinCount
                 , gBrickAnims = brickAnims'
@@ -340,6 +357,7 @@ step dt gs
                 , gFlagOffset = gFlagOffset gs
                 , gFlagTimer  = if ph2 == CastleComplete then 0 else gFlagTimer gs
                 , gDeathTimer = 0
+                , gFreezeTimer = newFreezeTimer
                 }
 
     gs' = gsTemp
@@ -370,8 +388,9 @@ stepDeath dt gs =
                            , mState = Small, mFace = 1, mInv = 0
                            , mFireCool = 0, mCrouch = False
                            , mGround = False, mSliding = False
-                           , mSkidding = False }
-             respawning = newPhase == Play
+                           , mSkidding = False
+                           , mTransformTimer = 0, mTransformTarget = Small }
+             respawning = newPhase == LevelIntro
          in gs { gMario      = if respawning then resetM else mMoved
                , gEnem       = if respawning then lEnemies currentLevel else gEnem gs
                , gCoins      = if respawning then lCoins   currentLevel else gCoins gs
@@ -386,8 +405,26 @@ stepDeath dt gs =
                , gPhase      = newPhase
                , gKeys       = KS False False False False False
                , gDeathTimer = 0
+               , gFreezeTimer = 0
                }
        else gs { gMario = mMoved, gDeathTimer = newDeathTimer }
+
+-- | While Mario is transforming: tick his flash timer, freeze all enemies,
+--   firebars, projectiles, and the level timer. Mario himself still animates
+--   (his mTransformTimer ticks in the normal step path once freeze lifts, but
+--   we need to advance it here too so the freeze expires correctly).
+stepFreeze :: Float -> GS -> GS
+stepFreeze dt gs =
+  let m  = gMario gs
+      t  = gFreezeTimer gs - dt
+      -- Advance Mario's transform timer so it stays in sync with the freeze
+      newTransformTimer = max 0 (mTransformTimer m - dt)
+      m' = if newTransformTimer <= 0
+             then m { mTransformTimer = 0, mState = mTransformTarget m }
+             else m { mTransformTimer = newTransformTimer }
+  in gs { gMario       = m'
+        , gFreezeTimer = max 0 t
+        }
 
 -- | Castle completion: after the axe/Bowser defeat, let Bowser visibly fall
 --   before moving on. World 1-4 advances to 2-1; World 2-4 ends the game.
@@ -517,6 +554,7 @@ advanceToNextLevel gs =
                , gFlagTimer  = 0
                , gKeys       = KS False False False False False
                , gDeathTimer = 0
+               , gFreezeTimer = 0
                }
        else gs { gPhase = Win }
 

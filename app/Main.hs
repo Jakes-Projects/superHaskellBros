@@ -7,7 +7,7 @@ import System.Process (ProcessHandle)
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Game
 import Constants (sW, sH)
-import Types (GS, MS(MDead), Phase(LevelComplete), gMario, mState, gPhase, gLevels, gLevelIdx, lWorld, lNumber)
+import Types (GS, MS(MDead), Phase(LevelComplete, LevelIntro), gMario, mState, gPhase, gLevels, gLevelIdx, lWorld, lNumber)
 import GameState (initGS, step, handleEv)
 import Rendering (Sprites, loadSprites, draw)
 import Music
@@ -20,11 +20,13 @@ bgCol :: Color
 bgCol = makeColorI 92 148 252 255
 
 desiredTrack :: GS -> TrackId
-desiredTrack gs =
-  let lvl  = gLevels gs !! gLevelIdx gs
-      dead = mState (gMario gs) == MDead
-      lc   = gPhase gs == LevelComplete
-  in selectTrack dead lc (lWorld lvl) (lNumber lvl)
+desiredTrack gs
+  | gPhase gs == LevelIntro = TSilent
+  | otherwise =
+      let lvl  = gLevels gs !! gLevelIdx gs
+          dead = mState (gMario gs) == MDead
+          lc   = gPhase gs == LevelComplete
+      in selectTrack dead lc (lWorld lvl) (lNumber lvl)
 
 handleEvIO :: IORef MusicState -> IORef (Maybe ProcessHandle) -> Event -> GS -> IO GS
 handleEvIO musicRef flagpoleRef ev gs = do
@@ -58,7 +60,6 @@ main = do
   musicRef    <- newIORef initMusicState
   flagpoleRef <- newIORef (Nothing :: Maybe ProcessHandle)
   sprites     <- loadSprites
-  switchIfNeeded musicRef TOverworld
   playIO
       win
       bgCol
