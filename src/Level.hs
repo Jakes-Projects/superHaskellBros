@@ -782,67 +782,143 @@ level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (183*ts) 2 2
 
 --------------------------------------------------------------------------------
 -- World 2-3
--- Overworld with pits: ground is broken into segments with gaps.
--- Mario must jump the gaps; platforms bridge the wider ones.
--- Original 2-3 has Hammer Bros; substituted with Koopas.
+-- Bridge / athletic redesign.
+-- Final polish:
+--   • longer map length restored
+--   • varied but fair bridge gaps
+--   • coin arcs guide Mario over jumps
+--   • no coins directly on ? blocks
+--   • middle platform is intentional and supported
+--   • fewer Cheep-cheeps so it is less overwhelming
+--   • flat recovery section before final staircase
 --------------------------------------------------------------------------------
 
 level2_3 :: Level
-level2_3 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (213*ts) 2 3
+level2_3 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (198*ts) 2 3
   where
-    -- Broken ground segments (gaps between segments are instant death)
-    seg1  = mkGround 0   16
-    seg2  = mkGround 19  36
-    seg3  = mkGround 39  57
-    seg4  = mkGround 60  80
-    seg5  = mkGround 83  110
-    seg6  = mkGround 113 135
-    seg7  = mkGround 138 175
-    seg8  = mkGround 178 220
-    ground = seg1 ++ seg2 ++ seg3 ++ seg4 ++ seg5 ++ seg6 ++ seg7 ++ seg8
+    castleOnGround c =
+      mkRect Castle c (c+4) 1 5 ++
+      [Tile x 6 Castle | x <- [c, c+2, c+4]]
 
-    -- Platforms bridging the gaps (also act as collectible routes)
-    plat1 = mkPlatform 3 14 21   -- over gap 17-18
-    plat2 = mkPlatform 4 37 44   -- over gap 37-38
-    plat3 = mkPlatform 3 55 62   -- over gap 58-59
-    plat4 = mkPlatform 5 78 86   -- over gap 81-82
-    plat5 = mkPlatform 3 108 116 -- over gap 111-112
-    plat6 = mkPlatform 4 133 140 -- over gap 136-137
-    plat7 = mkPlatform 3 173 180 -- over gap 176-177
+    bridge r c1 c2 = mkRow Step r c1 c2
 
-    -- ? blocks sprinkled above the platforms
-    qBlocks =
-         mkQPower 5 15 15 ++ mkQCoin 5 16 16
-      ++ mkQPower 6 38 38 ++ mkQCoin 6 39 40
-      ++ mkQPower 5 56 56 ++ mkQCoin 5 57 57
-      ++ mkQPower 7 79 79 ++ mkQCoin 7 80 82
-      ++ mkQPower 5 109 109 ++ mkQCoin 5 110 112
-      ++ mkQPower 6 134 134 ++ mkQCoin 6 135 136
-      ++ mkQPower 5 174 174 ++ mkQCoin 5 175 176
+    -- Support posts continue below the visible screen so they do not look cut off.
+    posts r cols =
+      concat [ [Tile c y Step | y <- [-4..r-1]] | c <- cols ]
 
-    -- Pipes at the edges of some segments (with Piranhas)
-    pipes = mkPipeGroup [(16,2),(57,2),(110,3),(175,2)]
+    -- Only the start and ending have normal ground.
+    startGround = mkGround 0 17
 
-    finish = mkStairsUp 205 8
-    flag   = mkFlag 213
-    castle = mkCastle 216
+    -- Recovery ground before the final staircase.
+    -- This gives Mario a safe stretch after the bridge section.
+    endGround = mkGround 166 216
 
-    tiles = ground ++ plat1 ++ plat2 ++ plat3 ++ plat4 ++ plat5 ++ plat6 ++ plat7
-         ++ qBlocks ++ pipes ++ finish ++ flag ++ castle
+    startCastle = castleOnGround 0
 
+    -- Start staircase onto the first bridge.
+    startStairs =
+         [Tile 10 1 Step]
+      ++ [Tile 11 r Step | r <- [1,2]]
+      ++ [Tile 12 r Step | r <- [1..3]]
+      ++ [Tile 13 r Step | r <- [1..4]]
+
+    -- Main bridge sections.
+    -- Gaps vary from 3-4 tiles, so they feel more meaningful without being unfair.
+    bridge1 = bridge 4 13 30
+    bridge2 = bridge 4 34 53
+    bridge3 = bridge 4 58 77
+    bridge4 = bridge 4 83 103
+    bridge5 = bridge 4 108 128
+    bridge6 = bridge 4 133 156
+
+    -- Intentional middle platform:
+    -- placed under the middle bridge gap as a visual feature and safety route.
+    middlePlatforms =
+         bridge 2 80 91
+      ++ bridge 2 158 164
+
+    bridgeSupports =
+         posts 4 [14, 22, 30]
+      ++ posts 4 [35, 44, 53]
+      ++ posts 4 [59, 68, 77]
+      ++ posts 4 [84, 94, 103]
+      ++ posts 4 [109, 119, 128]
+      ++ posts 4 [134, 146, 156]
+      ++ posts 2 [80, 91, 160, 164]
+
+    -- Minimal ? blocks.
+    -- Coin list below avoids these exact coordinates.
+    blocks =
+         mkQPower 7 24 24
+      ++ mkQCoin  7 25 26
+
+      ++ mkQPower 7 112 112
+      ++ mkQCoin  7 113 114
+
+    -- Final staircase is close to the flag, but the whole level stays long.
+    finish = mkStairsUp 187 8 ++ [Tile 195 r Step | r <- [1..8]]
+    flag   = mkFlag 198
+    castle = castleOnGround 203
+
+    tiles =
+         startGround
+      ++ endGround
+      ++ startCastle
+      ++ startStairs
+      ++ bridge1
+      ++ bridge2
+      ++ bridge3
+      ++ bridge4
+      ++ bridge5
+      ++ bridge6
+      ++ middlePlatforms
+      ++ bridgeSupports
+      ++ blocks
+      ++ finish
+      ++ flag
+      ++ castle
+
+    -- Reduced enemy count so the level is challenging but not overwhelming.
     enemies =
-         map mkG [8,25,45,68,90,106,122,145,162,182,200]
-      ++ map mkK [32,52,85,118,150,170,195]
-      ++ map mkP [(16,1),(57,1),(110,2),(175,1)]
+      [ mkCheep 22 7 (-1)
+      , mkCheep 42 8 1
+      , mkCheep 66 6 (-1)
+      , mkCheep 90 8 1
+      , mkCheep 116 7 (-1)
+      , mkCheep 138 6 1
+      , mkCheep 150 8 (-1)
+      , mkCheep 162 6 1
+      ]
 
     coins = mkCoins $
-         [(15,7),(16,7)]           -- above plat1 Q blocks
-      ++ [(38,8),(39,8),(40,8)]    -- above plat2 Q blocks
-      ++ [(56,7),(57,7)]           -- above plat3 Q blocks
-      ++ [(79,9),(80,9),(81,9),(82,9)] -- above plat4 Q blocks
-      ++ [(109,7),(110,7),(111,7),(112,7)] -- above plat5 Q blocks
-      ++ [(134,8),(135,8),(136,8)] -- above plat6 Q blocks
-      ++ [(174,7),(175,7),(176,7)] -- above plat7 Q blocks
+         -- Early bridge coins, not on ? blocks at row 7 cols 24-26.
+         [(18,7),(19,7),(20,7),(21,7)]
+      ++ [(27,8),(28,8),(29,8)]
+
+      -- Coin arcs over bridge gaps.
+      ++ [(31,6),(32,7),(33,7),(34,6)]
+      ++ [(54,6),(55,7),(56,7),(57,6)]
+      ++ [(78,6),(79,7),(80,7),(81,7),(82,6)]
+      ++ [(104,6),(105,7),(106,7),(107,6)]
+      ++ [(129,6),(130,7),(131,7),(132,6)]
+
+      -- Coins that make the middle platform feel intentional.
+      ++ [(83,5),(84,5),(85,5),(86,5)]
+      ++ [(88,5),(89,5),(90,5)]
+
+      -- Middle bridge coins, avoiding ? blocks at row 7 cols 112-114.
+      ++ [(62,7),(63,7),(64,7)]
+      ++ [(110,8),(111,8),(115,8)]
+      ++ [(121,8),(122,8),(123,8)]
+
+      -- Back-half coins.
+      ++ [(136,7),(137,7),(138,7)]
+      ++ [(146,8),(147,8),(148,8)]
+      ++ [(158,5),(159,5),(160,5),(161,5)]
+
+      -- Recovery section before final staircase.
+      ++ [(168,4),(169,4),(170,4),(171,4)]
+      ++ [(178,4),(179,4),(180,4)]
 
 --------------------------------------------------------------------------------
 -- World 2-4
