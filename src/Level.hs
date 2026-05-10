@@ -123,7 +123,7 @@ mkLevel
 mkLevel ts_ es cs ps fs plats sx sy ex w n = Level ts_ es cs ps fs plats sx sy ex w n
 
 initMarioFromLevel :: Level -> Mario
-initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0 0 False False "" 0 False
+initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0 0 False False "" 0 False False
 
 --------------------------------------------------------------------------------
 -- Enemy helpers
@@ -239,8 +239,8 @@ level1_1 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (198*ts) 1 1
          map mkG [22, 35, 42, 53, 62, 78, 84, 100, 106, 110, 116, 144, 160]
       -- Koopas in wider open stretches
       ++ map mkK [64, 92, 130]
-      -- Piranhas in each pipe: use the same (column, height) as mkPipe
-      ++ map mkP [(28,2),(38,3),(46,4),(57,4),(163,2)]
+      -- Only pipes 3 and 4 have piranhas, matching the original World 1-1
+      ++ map mkP [(46,4),(57,4)]
 
     -- Coins: pre-placed coins are empty; ? block coins fly out on bump.
     coins = mkCoins []
@@ -378,9 +378,7 @@ level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*1.5) (200*ts) 
       , mkG  96
       , mkG 128
       , mkG 152
-      , mkP (178, 3)
-      , mkP (182, 3)
-      , mkP (186, 3)
+      -- No piranhas in the exit pipes — player must pass through them
       ]
 
     -- ── Coins ─────────────────────────────────────────────────────────────
@@ -437,130 +435,136 @@ level1_3 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*5) (244*ts) 1 3
 
 --------------------------------------------------------------------------------
 -- World 1-4  (Bowser's Castle)
--- Pixel-accurate from SMB_NES_World_1-4_Map.png
+-- Pixel-accurate reconstruction from SuperMarioBrosMap1-4.png.
 --
--- Floor: game rows 1-5, solid castle bricks with lava pit gaps.
--- Corridor: game rows 6-12, open space Mario walks through.
--- Ceiling: game rows 10-13, castle bricks hanging down.
--- Left wedge: game rows 6-8, cols 0-4 (staircase wall).
+-- Coordinate mapping: NES tile col == game tile col (1:1).
+--   NES 16px tiles scaled to game 32px tiles (tileScale = 32/48 handles sprite sizing).
+--   NES rows inverted: game_row = 14 - NES_row.
 --
--- Mario's walkable surface = top of game row 5 = Y 192.
--- Mario start Y = ts*6 (feet planted on floor top).
+-- Walkable floor surface = top of game row 5 = Y (5*ts + ts/2) in Gloss world coords.
+-- Mario start Y = ts*6 so his feet land exactly on the floor surface.
 --
--- Lava pits (floor gaps):
---   Pit A cols 13-14, Pit B cols 26-28, Pit C cols 32-34, Pit D cols 128-140
+-- Lava pits (row -2 Ground tiles, tiled by drawLava automatically):
+--   Pit A: cols 13–14   Pit B: cols 26–28   Pit C: cols 32–34   Pit D: cols 128–140
 --
--- Firebar pivots: single FirebarTile at the top of each chain.
--- Chain blocks below each pivot are Ground (castle bricks).
--- Bridge: cols 128-140 floor row 5 = walkable, castle_bridge.png rendered there.
+-- Bridge: castle_bridge.png (624×64) auto-rendered by drawCastleBridge over lavaD.
+--
+-- Firebars: 7 total, pivots attached to ceiling or rising from floor.
+--   Ceiling-hung (pivot at game row 9, chain hangs to row 7):
+--     col 30 (floor post — rises from below), col 49, col 60, col 67
+--   Floor posts (pivot at game row 6, chain up to row 4):
+--     col 76, col 84
+--   Pre-bridge (pivot at game row 9, near boss chamber): col 123
+--
+-- Bowser: 96×96 sprite (3×3 tiles), spawned at col 133 on the bridge.
+-- Axe:    36×40 sprite, placed on the right wall at col 141, game row 5.
 --------------------------------------------------------------------------------
 
 level1_4 :: Level
 level1_4 = mkLevel tiles enemies coins [] firebars [] (ts*3) (ts*6) (159*ts) 1 4
   where
-    -- ── FLOOR (game rows -3 to 5, extended down to fill screen) ─────────
-    -- Each section is a full rectangle from row -3 up to 5 (no void below).
-    -- Gaps in cols 13-14, 26-28, 32-34, 128-140 are lava pits.
-    --
-    -- Solid sections (from NES pixel data):
-    --   A: cols 0-12   B: cols 15-25   C: cols 29-31
-    --   D: cols 35-127  E: cols 141-159
-    --
-    -- Rows 4-5: additional gaps at cols 76,84 (firebar posts - those are Ground too,
-    --           already included since chain is Ground)
-    -- Rows 1-2: cols 35-127 solid (includes bridge cols 128-140 gap handled by lavaD)
-
+    -- ── FLOOR ────────────────────────────────────────────────────────────
+    -- Five solid sections; lava pits are the gaps between them.
+    -- Rows -3 to 5. Lava pit columns excluded so no bricks appear inside pits.
     floorA = mkRect Ground   0  12 (-3) 5
     floorB = mkRect Ground  15  25 (-3) 5
     floorC = mkRect Ground  29  31 (-3) 5
     floorD = mkRect Ground  35 127 (-3) 5
+          ++ mkRect Ground  30  30 (-3)  3
     floorE = mkRect Ground 141 159 (-3) 5
 
-    -- Row 3 loses cols 13-14 at lava level but floor continues below
-    -- (lavaA only has 2 cols so A section handles that correctly)
+    -- ── BRIDGE (solid, walkable) ──────────────────────────────────────────
+    -- Step tiles at game row 5 give Bowser and Mario a surface to stand on
+    -- over lavaD. castle_bridge.png (624x64) is drawn on top visually.
+    bridge = mkRow Step 5 128 140
 
-    -- ── LAVA KILL TILES (row -2) ──────────────────────────────────────────
+    -- ── LAVA KILL TILES (row -2) ─────────────────────────────────────────
+    -- drawLava tiles lava.png (144x72) across each contiguous run at natural size.
+    -- drawCastleBridge additionally renders castle_bridge.png over lavaD.
     lavaA = [Tile c (-2) Ground | c <- [13..14]]
     lavaB = [Tile c (-2) Ground | c <- [26..28]]
     lavaC = [Tile c (-2) Ground | c <- [32..34]]
     lavaD = [Tile c (-2) Ground | c <- [128..140]]
 
-    -- ── LEFT CORRIDOR WEDGE (game rows 6-8, cols 0-4) ────────────────────
-    wedge = mkRow Ground 8 0  2
-         ++ mkRow Ground 7 0  3
-         ++ mkRow Ground 6 0  4
+    -- ── LEFT ENTRANCE WEDGE (NES rows 7–8 → game rows 6–7) ───────────────
+    -- The castle entrance narrows toward the top: staircase step on the left wall.
+    -- NES r8 (game r6): cols 0–3   NES r7 (game r7): cols 0–2
+    wedge = mkRow Ground 7 0 2
+         ++ mkRow Ground 6 0 3
 
-    -- ── CEILING (game rows 10-13) ─────────────────────────────────────────
-    ceil13 = mkRow Ground 13 0 159
-    ceil12 = mkRow Ground 12  0  23
-          ++ mkRow Ground 12 37  71
-          ++ [Tile 80 12 Ground, Tile 88 12 Ground]
-          ++ mkRow Ground 12 97 103
-          ++ mkRow Ground 12 123 127
-          ++ mkRow Ground 12 142 143
+    -- ── CEILING ───────────────────────────────────────────────────────────
+    -- Derived from NES rows 2–5 (game rows 12–9), pixel-accurate runs.
+    --
+    -- game r12  (NES r2): full span, cols 0–159
+    -- game r11  (NES r3): [0–23] [37–71] [97–103] [123–127] [142–143]
+    -- game r10  (NES r4): [0–23] [37–71] [97–103] [123–127] [142–143]
+    -- game r9   (NES r5): [23]   [37–71] [142–143]
+    --   (cols 80,88 are firebar pivots embedded in the thick ceiling at r11)
+    ceil12 = mkRow Ground 12  0 159
     ceil11 = mkRow Ground 11  0  23
           ++ mkRow Ground 11 37  71
           ++ mkRow Ground 11 97 103
           ++ mkRow Ground 11 123 127
           ++ mkRow Ground 11 142 143
-    ceil10 = [Tile 23 10 Ground]
+    ceil10 = mkRow Ground 10  0  23
           ++ mkRow Ground 10 37  71
+          ++ mkRow Ground 10 97 103
+          ++ mkRow Ground 10 123 127
           ++ mkRow Ground 10 142 143
+    ceil9  = [Tile 23 9 Ground]
+          ++ mkRow Ground 9 37 71
+          ++ mkRow Ground 9 142 143
 
-    -- ── FIREBAR CHAINS (Ground = castle brick, visual chain below pivot) ──
-    -- Col 30: visible post above floor (game rows 6-8), non-solid so Mario passes through
-    chain30 = mkRect FirebarTile 30 30 6 8
-    -- Cols 49,60,67: ceiling-hung chain (game rows 7-8, below pivot at r9)
-    chain49 = mkRect FirebarTile 49 49 7 8
-    chain60 = mkRect FirebarTile 60 60 7 8
-    chain67 = mkRect FirebarTile 67 67 7 8
-    -- Cols 76,84: floor posts (game rows 4-5, below pivot at r6)
-    chain76 = mkRect FirebarTile 76 76 4 5
-    chain84 = mkRect FirebarTile 84 84 4 5
-
-    -- ── FIREBAR PIVOTS (single FirebarTile = used ? block sprite) ────────
-    pivot30  = [Tile  30 9 FirebarTile]
-    pivot49  = [Tile  49 9 FirebarTile]
+    -- ── FIREBAR PIVOTS ────────────────────────────────────────────────────
+    -- Each firebar has exactly ONE anchor block (the pivot tile the bar spins from).
+    -- No chain tiles — the NES only shows the single pivot block, not a stack.
+    -- FirebarTile renders as an empty/used block sprite (no collision).
+    pivot30  = [Tile  30 9 FirebarTile]   -- floor post: pivot at ceiling level
+    pivot49  = [Tile  49 9 FirebarTile]   -- ceiling-hung
     pivot60  = [Tile  60 9 FirebarTile]
     pivot67  = [Tile  67 9 FirebarTile]
-    pivot76  = [Tile  76 6 FirebarTile]
+    pivot76  = [Tile  76 6 FirebarTile]   -- floor post: pivot just above floor
     pivot84  = [Tile  84 6 FirebarTile]
-    pivot153 = [Tile 153 3 FirebarTile]
+    pivot123 = [Tile 123 9 FirebarTile]   -- pre-bridge, pivot at corridor ceiling
 
-    -- ── AXE (end of bridge, col 127 game row 5) ───────────────────────────
-    axe = [Tile 127 5 Axe]
+    -- ── AXE ──────────────────────────────────────────────────────────────
+    -- Placed at col 141 row 6 (one tile above the floor, in the open corridor)
+    -- so it is visible and not buried inside the floor wall tiles.
+    -- castle_axe.png is 36x40px, rendered at natural size by drawTile.
+    axe = [Tile 141 6 Axe]
 
     -- ── END CASTLE ────────────────────────────────────────────────────────
     castle = mkCastle 155
 
     tiles = floorA ++ floorB ++ floorC ++ floorD ++ floorE
+         ++ bridge
          ++ lavaA ++ lavaB ++ lavaC ++ lavaD
          ++ wedge
-         ++ ceil13 ++ ceil12 ++ ceil11 ++ ceil10
-         ++ chain30 ++ chain49 ++ chain60 ++ chain67
-         ++ chain76 ++ chain84
+         ++ ceil12 ++ ceil11 ++ ceil10 ++ ceil9
          ++ pivot30 ++ pivot49 ++ pivot60 ++ pivot67
-         ++ pivot76 ++ pivot84 ++ pivot153
+         ++ pivot76 ++ pivot84 ++ pivot123
          ++ axe ++ castle
 
     -- ── FIREBARS ─────────────────────────────────────────────────────────
-    -- World coords: col*32+16, game_row*32+16
-    -- All pivots at game row 9 (cols 30,49,60,67) or row 6 (76,84) or row 3 (153)
+    -- Firebar x = col*ts + ts/2,  y = row*ts + ts/2.
+    -- All firebars are length 4 (matching original NES 1-4).
+    -- Phases staggered so they don't all point the same way at once.
     firebars =
-      [ Firebar  976 304 0.00 2.2 4   -- col 30,  pivot game row 9
-      , Firebar 1584 304 0.00 2.0 3   -- col 49,  pivot game row 9
-      , Firebar 1936 304 2.09 2.0 3   -- col 60,  offset phase
-      , Firebar 2160 304 4.19 2.0 3   -- col 67,  offset phase
-      , Firebar 2448 208 0.00 2.2 3   -- col 76,  pivot game row 6
-      , Firebar 2704 208 3.14 2.2 3   -- col 84,  opposite phase
-      , Firebar 4912 112 0.00 2.0 3   -- col 153, pivot game row 3
+      [ Firebar  (30*ts + ts/2) (9*ts + ts/2)   0.00 2.2 4  -- col 30  r9 floor post
+      , Firebar  (49*ts + ts/2) (9*ts + ts/2)   0.00 2.0 4  -- col 49  r9 ceiling-hung
+      , Firebar  (60*ts + ts/2) (9*ts + ts/2)   2.09 2.0 4  -- col 60  r9 offset phase
+      , Firebar  (67*ts + ts/2) (9*ts + ts/2)   4.19 2.0 4  -- col 67  r9 offset phase
+      , Firebar  (76*ts + ts/2) (6*ts + ts/2)   0.00 2.2 4  -- col 76  r6 floor post
+      , Firebar  (84*ts + ts/2) (6*ts + ts/2)   3.14 2.2 4  -- col 84  r6 opposite phase
+      , Firebar (123*ts + ts/2) (9*ts + ts/2)   1.05 2.0 4  -- col 123 r9 pre-bridge
       ]
 
     -- ── ENEMIES ───────────────────────────────────────────────────────────
-    -- Bowser on bridge. Bridge top = game row 5 top = Y 192.
-    -- Spawn him at col 133 (center of bridge), Y = ts*6 = 192 (on floor surface).
+    -- Bowser: 96x96 sprite, spawned at col 133 on the bridge.
+    -- eY = ts*6 places his feet exactly on the bridge surface (game row 5 top).
+    -- eVX = -55 so he paces left across the bridge toward Mario.
     enemies =
-      [ Enemy (133 * ts) (6 * ts) (-90) 0 (EBowser 3.0 2.5 1.0 5) Bowser ]
+      [ Enemy (133 * ts) (ts * 6) (-55) 0 (EBowser 2.5 3.0 1.0 5) Bowser ]
 
     coins = mkCoins []
 
@@ -673,7 +677,7 @@ level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
     enemies =
          map mkG [18,27,44,60,77,87,105,118,137,147,162,181,187]
       ++ map mkK [34,69,112,154,176]
-      ++ map mkP [(39,2),(54,3),(134,3),(150,4),(169,3)]
+      ++ map mkP [(39,2),(54,3),(134,3),(169,3)]
 
     coins = mkCoins $
          -- Early coin lines above reachable blocks.

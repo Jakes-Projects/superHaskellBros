@@ -68,4 +68,5 @@ deathCheck m lv sx sy
                    , mFireCool = 0
                    , mCrouch  = False
                    , mGround  = False
+                   , mSliding = False
                    }

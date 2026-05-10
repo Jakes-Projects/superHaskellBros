@@ -155,6 +155,15 @@ data Sprites = Sprites
   , spJoeSwim3    :: Picture
   , spJoeSwim4    :: Picture
   , spJoeSwim5    :: Picture
+    -- Overworld end-of-level sprites
+  , spCastleLevelEnd :: Picture   -- castle_level_end.png  (replaces drawn castle tiles)
+  , spFlagpole       :: Picture   -- flagpole.png           (replaces drawn pole)
+  , spFlag           :: Picture   -- flag.png               (slides down the pole)
+    -- Flagpole slide sprites (one per Mario form)
+  , spMarioSlide  :: Picture   -- mario_slide.png
+  , spBigSlide    :: Picture   -- mario_big_slide.png
+  , spFireSlide   :: Picture   -- mario_fire_slide.png
+  , spJoeSlide    :: Picture   -- joe_fire_slide.png
   }
 
 -- ─── Loader ───────────────────────────────────────────────────────────────────
@@ -315,6 +324,15 @@ loadSprites = Sprites
   <*> loadPNG "assets/joe_fire_swim_3.png"
   <*> loadPNG "assets/joe_fire_swim_4.png"
   <*> loadPNG "assets/joe_fire_swim_5.png"
+  -- Overworld end-of-level sprites
+  <*> loadPNG "assets/castle_level_end.png"
+  <*> loadPNG "assets/flagpole.png"
+  <*> loadPNG "assets/flag.png"
+  -- Flagpole slide sprites
+  <*> loadPNG "assets/mario_slide.png"
+  <*> loadPNG "assets/mario_big_slide.png"
+  <*> loadPNG "assets/mario_fire_slide.png"
+  <*> loadPNG "assets/joe_fire_slide.png"
 
 -- ─── World Y offset ──────────────────────────────────────────────────────────
 worldYOffset :: Float
@@ -362,12 +380,16 @@ draw spr gs = return $ pictures
       , if castle then drawLava spr (gTiles gs) else blank
       -- Piranhas behind all tiles
       , drawEnem    spr underground clock (filter isPiranha (gEnem gs))
-      , drawTilesOfType spr underground underwater castle clock isGround      anims (gTiles gs)
-      , drawTilesOfType spr underground underwater castle clock (not.isGround) anims (gTiles gs)
+      , drawTilesOfType spr underground underwater castle clock flagOff isGround      anims (gTiles gs)
+      , drawTilesOfType spr underground underwater castle clock flagOff (not.isGround) anims (gTiles gs)
       , drawBrickAnims  spr underground clock anims
       , if underwater then drawCoralTiles spr (gTiles gs) else blank
       -- Bridge rendered over floor tiles at Bowser's pit
       , if castle then drawCastleBridge spr (gTiles gs) else blank
+      -- Overworld end-of-level castles drawn as single sprites (non-castle levels)
+      , if not castle then drawOverworldCastles spr (gTiles gs) else blank
+      -- Flagpole drawn as a sprite pass (non-castle levels)
+      , if not castle then drawFlagpoles spr flagOff (gTiles gs) else blank
       , drawPlatforms spr (gPlatforms gs)
       , drawCoins   spr underwater clock (gCoins gs)
       , drawPups    spr clock (gPups  gs)
@@ -376,7 +398,8 @@ draw spr gs = return $ pictures
       , drawEnem    spr underground clock (filter (not . isPiranha) (gEnem gs))
       , drawMario   spr       (gMario gs)
       ]
-    anims = gBrickAnims gs
+    anims   = gBrickAnims gs
+    flagOff = gFlagOffset gs
 
 -- | Tile water.png across the top of the screen in screen space.
 -- The real NES game has a ~2-tile (64px) blue sky strip above the wave.
@@ -422,7 +445,13 @@ drawMario spr m
     drawY  = if mCrouch m then mY m - ts/2 else mY m
 
 pickMarioFrame :: Sprites -> Mario -> Picture
-pickMarioFrame spr m =
+pickMarioFrame spr m
+  -- Slide sprite overrides everything while on the flagpole
+  | mSliding m = case mState m of
+      Big  -> spBigSlide  spr
+      Fire -> if mJoeMode m then spJoeSlide spr else spFireSlide spr
+      _    -> spMarioSlide spr
+  | otherwise =
   let airborne  = not (mGround m)
       wFrame    = (floor (mAnim m * 10) :: Int) `mod` 3
       still     = abs (mVX m) < 5 && mGround m
@@ -504,7 +533,9 @@ drawEnem spr ug clock = pictures . map (drawE spr ug clock)
 
 drawE :: Sprites -> Bool -> Float -> Enemy -> Picture
 drawE spr ug clock e = case eState e of
-  EDead _             -> translate cx (eY e + 5) (if ug then spUgGoombaCrushed spr else spGoombaCrushed spr)
+  EDead _
+    | eType e == Piranha -> blank   -- no piranha death sprite
+    | otherwise          -> translate cx (eY e + 5) (if ug then spUgGoombaCrushed spr else spGoombaCrushed spr)
   EShell timer moving -> translate cx (eY e + spriteHalf) (shellPic timer moving)
   EBowser _ _ _ _     -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
   _               ->
@@ -524,7 +555,7 @@ drawE spr ug clock e = case eState e of
 
     shouldDrawAlive en = case eState en of
       EAlive        -> True
-      EPiranha _ up -> up || eY en > eVY en - ts
+      EPiranha _ up -> up || eY en + 72 > eVY en   -- hide once top of sprite sinks below pipe rim
       _             -> False
 
 drawEnemyBody :: Sprites -> Bool -> Float -> Enemy -> Picture
@@ -690,16 +721,16 @@ drawBush spr (c, isTriple) =
 tileScale :: Float
 tileScale = ts / 48
 
-drawTiles :: Sprites -> Bool -> Bool -> Bool -> Float -> [BrickAnim] -> [Tile] -> Picture
-drawTiles spr ug uw castle clock anims ts_ =
-  pictures (map (drawTile spr ug uw castle clock anims) ts_)
+drawTiles :: Sprites -> Bool -> Bool -> Bool -> Float -> Float -> [BrickAnim] -> [Tile] -> Picture
+drawTiles spr ug uw castle clock flagOff anims ts_ =
+  pictures (map (drawTile spr ug uw castle clock flagOff anims) ts_)
 
-drawTilesOfType :: Sprites -> Bool -> Bool -> Bool -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
-drawTilesOfType spr ug uw castle clock p anims ts_ =
-  pictures (map (drawTile spr ug uw castle clock anims) (filter p ts_))
+drawTilesOfType :: Sprites -> Bool -> Bool -> Bool -> Float -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
+drawTilesOfType spr ug uw castle clock flagOff p anims ts_ =
+  pictures (map (drawTile spr ug uw castle clock flagOff anims) (filter p ts_))
 
-drawTile :: Sprites -> Bool -> Bool -> Bool -> Float -> [BrickAnim] -> Tile -> Picture
-drawTile spr ug uw castle clock anims t = translate tx (ty + bump) pic
+drawTile :: Sprites -> Bool -> Bool -> Bool -> Float -> Float -> [BrickAnim] -> Tile -> Picture
+drawTile spr ug uw castle clock flagOff anims t = translate tx (ty + bump) pic
   where
     tx   = fromIntegral (tCol t) * ts + ts/2
     ty   = fromIntegral (tRow t) * ts + ts/2
@@ -735,9 +766,9 @@ drawTile spr ug uw castle clock anims t = translate tx (ty + bump) pic
         in translate (ts/2) offsetY $ scale scaleX scaleY (spPipe spr)
       Pipe        -> blank
       PipeR       -> blank
-      FlagPole    -> drawFlagPole
-      FlagBase    -> drawFlagBase
-      Castle      -> drawCastle t
+      FlagPole    -> blank   -- drawn by drawFlagpoles pass
+      FlagBase    -> blank   -- drawn by drawFlagpoles pass
+      Castle      -> blank   -- drawn by drawOverworldCastles pass
       SlopeLeft   -> groundPic
       SlopeRight  -> groundPic
       Axe         -> if castle then scale (36/48) (40/48) (spCastleAxe spr) else drawAxe
@@ -824,35 +855,74 @@ drawAxe = pictures
   , color (makeColorI 255 215 0 255) (translate 0 8 (polygon [(-10,0),(10,0),(0,12)]))
   ]
 
-drawFlagPole :: Picture
-drawFlagPole = pictures
-  [ color (makeColorI 188 188 188 255) (rectangleSolid 4 ts)
-  , color (makeColorI 0 200 0 255)
-      (translate 6 (ts*0.3) (polygon [(-2,-8),(-2,8),(12,0)]))
-  ]
+-- | Draw all overworld flagpoles as sprites.
+--   flagpole.png is 48×480 px, scaled uniformly by ts/48 = 2/3 → 32×320 px rendered.
+--   The pole tiles span rows 1–10.
+--     Row 1 bottom edge  = ts/2        =  16
+--     Row 10 top edge    = 10*ts+ts/2+ts/2 = 11*ts = 352   (wait: row10 centre=335, top=351)
+--   Sprite bottom must align with row-1 bottom (Y=16), sprite top with row-10 top (Y=351).
+--   Sprite centre Y = (16 + 351) / 2 = 183.5
+--   flag.png (36×36) starts with its centre just below the pole tip; slides down by flagOff.
+--   Flag top starts at pole top (Y=351), so flag centre starts at 351-18=333.
+--   Flag stops when its bottom reaches the ground surface (Y=32): centre stops at 32+18=50.
+drawFlagpoles :: Sprites -> Float -> [Tile] -> Picture
+drawFlagpoles spr flagOff tiles = pictures (map drawOnePole poleColumns)
+  where
+    baseTiles   = [ t | t <- tiles, tType t == FlagBase ]
+    poleColumns = [ tCol t | t <- baseTiles ]
 
-drawFlagBase :: Picture
-drawFlagBase = pictures
-  [ color (makeColorI 188 188 188 255) (rectangleSolid 4 ts)
-  , color (makeColorI 140 140 140 255) (translate 0 (-ts/2+4) (rectangleSolid ts 8))
-  ]
+    sc = ts / 48   -- uniform scale: 48px wide → 32px
 
-drawCastle :: Tile -> Picture
-drawCastle t =
-  let isBattlement = tRow t == 5
-      isDoor = (tCol t == 208 || tCol t == 209) && tRow t <= 1
-  in if isDoor then blank
-     else pictures
-       [ color (makeColorI 160 72 32 255) (rectangleSolid ts ts)
-       , color (makeColorI 130 52 16 255) $ pictures
-           [ translate 0        (ts*0.25) (rectangleSolid ts 2)
-           , translate (ts*0.3) 0         (rectangleSolid 2 ts)
+    -- Pole bottom edge = bottom of row-1 tile = row1Centre - ts/2 = ts - ts/2 = ts/2 = 16
+    -- Pole top edge    = top of row-10 tile   = row10Centre + ts/2 = 10*ts+ts/2+ts/2 = 11*ts = 352
+    -- But rendered sprite is 320px tall (480 * 2/3). Anchor bottom to Y=16, so centre at 16+160=176.
+    poleBottomY = ts / 2                    -- = 16  (bottom of row-1 tile)
+    spriteHalfH = (480 * sc) / 2           -- = 160
+    poleCentreY = poleBottomY + spriteHalfH -- = 176
+
+    -- Flag starts at the pole top. Pole top ≈ poleBottomY + 480*sc = 16 + 320 = 336.
+    -- Flag centre = poleTop - flagHalf = 336 - 18 = 318. Slides DOWN by flagOff.
+    -- Floor: flag bottom at ground surface (Y=32), so flag centre floor = 32 + 18 = 50.
+    poleTopY      = poleBottomY + 480 * sc  -- = 336
+    flagStartY    = poleTopY - 18           -- = 318 (flag centre at pole top)
+
+    drawOnePole c =
+      let poleX    = fromIntegral c * ts + ts / 2
+          flagY    = flagStartY - flagOff
+      in pictures
+           [ translate poleX poleCentreY (scale sc sc (spFlagpole spr))
+           , translate (poleX + 18) flagY (spFlag spr)
            ]
-       , if isBattlement
-           then color (makeColorI 100 36 8 255)
-                  (translate 0 (ts/2-3) (rectangleSolid (ts*0.5) 6))
-           else blank
-       ]
+
+-- | Draw overworld end-of-level castles.
+--   castle_level_end.png is 240×240 px.
+--   mkCastle c produces cols c..c+4 (5 tiles wide) × rows 0..5 (6 rows tall incl battlements).
+--   World width  = 5*ts = 160 px  →  scX = 160/240 = 2/3
+--   World height = 6*ts = 192 px  →  scY = 192/240 = 4/5
+--   Castle bottom must sit ON TOP of the ground surface (Y = ts = 32).
+--   Castle centre Y = groundSurface + destH/2 = 32 + 96 = 128.
+drawOverworldCastles :: Sprites -> [Tile] -> Picture
+drawOverworldCastles spr tiles = pictures (map drawOneCastle castleGroups)
+  where
+    castleTiles  = [ t | t <- tiles, tType t == Castle ]
+    castleGroups = case castleTiles of
+      [] -> []
+      _  -> [minimum (map tCol castleTiles)]
+
+    sprW  = 240 :: Float
+    sprH  = 240 :: Float
+    destW = 5 * ts    -- 160
+    destH = 6 * ts    -- 192
+    scX   = destW / sprW
+    scY   = destH / sprH
+
+    -- Ground surface Y = top of row-0 tile = ts/2 + ts/2 = ts = 32
+    groundSurface = ts   -- = 32
+    castleCentreY = groundSurface + destH / 2   -- = 32 + 96 = 128
+
+    drawOneCastle minC =
+      let cx = fromIntegral minC * ts + destW / 2
+      in translate cx castleCentreY (scale scX scY (spCastleLevelEnd spr))
 
 drawPiranha :: Sprites -> Bool -> Float -> Picture
 drawPiranha spr ug clock =
@@ -862,48 +932,68 @@ drawPiranha spr ug clock =
 
 -- | Draw lava.png (144x72) tiled across each lava pit at natural size.
 --   Pits are identified by Ground tiles at row -2.
---   Rendered BEFORE floor tiles so castle bricks overlap the edges.
+--   A red fill covers the gap below the sprite to the screen bottom.
+--   Floor tiles (drawn after) cover any sprite overflow at the pit edges.
 drawLava :: Sprites -> [Tile] -> Picture
 drawLava spr tiles = pictures (concatMap drawPit pits)
   where
     sprW  = 144 :: Float
-    -- Pits span game rows 1-2 (height 64px). Center of gap = Y 64.
-    -- Lava sprite is 144x72, so it slightly overflows vertically — looks natural.
-    lavaY = 2 * ts   -- = 64, center of the 2-row pit gap
+    lavaY = 2 * ts  -- = 64
+
+    lavaRed     = makeColorI 181 50 32 255
+    spriteBotY  = lavaY - 36          -- = 28, bottom edge of lava sprite
+    fillH       = 600 :: Float        -- tall enough to reach past screen bottom
+    fillCentreY = spriteBotY - fillH / 2  -- top of fill at sprite bottom, extends down
 
     lavaCols = [ tCol t | t <- tiles, tType t == Ground, tRow t == (-2) ]
 
-    pits = groupRuns (foldr insert [] (reverse lavaCols))
+    -- Group consecutive columns into pits.
+    pits = groupConsecutive (foldr insertSorted [] lavaCols)
       where
-        insert c []     = [[c]]
-        insert c (g:gs) = if c == last g + 1 then (g ++ [c]) : gs else g : [c] : gs
-        groupRuns = id
+        insertSorted c []     = [c]
+        insertSorted c (x:xs) = if c <= x then c:x:xs else x : insertSorted c xs
+        groupConsecutive []     = []
+        groupConsecutive (c:cs) = go [c] cs
+          where
+            go grp []     = [grp]
+            go grp (x:xs) = if x == last grp + 1
+                              then go (grp ++ [x]) xs
+                              else grp : go [x] xs
 
     drawPit colGroup =
-      let c1    = minimum colGroup
-          c2    = maximum colGroup
-          x1    = fromIntegral c1 * ts
-          x2    = fromIntegral (c2 + 1) * ts
-          pitW  = x2 - x1
-          n     = ceiling (pitW / sprW) :: Int
-          startX = x1 + sprW / 2
-      in [ translate (startX + fromIntegral i * sprW) lavaY (spLava spr)
+      let c1         = minimum colGroup
+          c2         = maximum colGroup
+          x1         = fromIntegral c1 * ts
+          x2         = fromIntegral (c2 + 1) * ts
+          pitW       = x2 - x1
+          pitCentreX = (x1 + x2) / 2
+          n          = ceiling (pitW / sprW) :: Int
+          -- First sprite centred on the pit; additional sprites tiled rightward
+          fillRect   = color lavaRed
+                         (translate pitCentreX fillCentreY
+                            (rectangleSolid pitW fillH))
+      in fillRect
+       : [ translate (pitCentreX + (fromIntegral i - fromIntegral (n-1) / 2) * sprW) lavaY (spLava spr)
          | i <- [0 .. n - 1] ]
 
 -- | Draw castle_bridge.png (624x64) over the Bowser pit (cols 128-140).
---   The bridge sits at game row 5 top (Y = 5*32+32 = 192).
---   Sprite is 624x64; center Y = 192 - 32 = 160 (just below floor top).
+--   Detected by Step tiles at game row 5 in the bridge column range.
+--   The bridge sprite is drawn directly — no masking — so the lava beneath
+--   it (drawn earlier) remains visible below the bridge planks.
 drawCastleBridge :: Sprites -> [Tile] -> Picture
 drawCastleBridge spr tiles =
-  let bridgeCols = [ tCol t | t <- tiles, tType t == Ground, tRow t == (-2)
+  let bridgeCols = [ tCol t | t <- tiles, tType t == Step, tRow t == 5
                              , tCol t >= 128, tCol t <= 140 ]
   in if null bridgeCols then blank
-     else let c1    = minimum bridgeCols
-              c2    = maximum bridgeCols
-              midX  = fromIntegral (c1 + c2 + 1) * ts / 2
-              -- Bridge top flush with floor top = game row 5 top = 192
-              -- Sprite 64px tall, center = 192 - 32 = 160
-              bridgeY = 5 * ts + ts - 32
+     else let c1      = minimum bridgeCols
+              c2      = maximum bridgeCols
+              x1      = fromIntegral c1 * ts
+              x2      = fromIntegral (c2 + 1) * ts
+              midX    = (x1 + x2) / 2
+              -- Bridge sprite: 624x64 px.
+              -- Position so its top surface aligns with the floor surface (row 5 top).
+              -- Row 5 top in world Y = 5*ts + ts/2 = 176. Sprite centre = 176 - 32 = 144.
+              bridgeY = 5 * ts + ts / 2 - 32
           in translate midX bridgeY (spCastleBridge spr)
 
 drawFirebars :: Sprites -> Float -> [Firebar] -> Picture

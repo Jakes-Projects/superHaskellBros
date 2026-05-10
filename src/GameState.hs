@@ -32,6 +32,9 @@ initGS =
         , gCoinCount  = 0
         , gBrickAnims = []
         , gPlatforms  = lPlatforms startLevel
+        , gFlagOffset = 0
+        , gFlagTimer  = 0
+        , gDeathTimer = 0
         }
 
 loadLevel :: Int -> GS -> GS
@@ -51,6 +54,9 @@ loadLevel idx gs
             , gTimer      = 400
             , gBrickAnims = []
             , gPlatforms  = lPlatforms lvl
+            , gFlagOffset = 0
+            , gFlagTimer  = 0
+            , gDeathTimer = 0
             }
   | otherwise = gs
 
@@ -105,11 +111,13 @@ isUnderwaterGS gs =
 
 step :: Float -> GS -> GS
 step dt gs
-  | gPhase gs /= Play = gs
-  | otherwise = gs'
+  | gPhase gs == LevelComplete        = stepFlagAnim dt gs
+  | gPhase gs /= Play                 = gs
+  | mState (gMario gs) == MDead       = stepDeath dt gs
+  | otherwise                         = gs'
   where
     ks  = gKeys gs
-    sol = filter (solid . tType) (gTiles gs)
+    sol = filter (\t -> solid (tType t) && tRow t /= (-2)) (gTiles gs)
 
     currentLevel = gLevels gs !! gLevelIdx gs
     underwater = isUnderwaterLevel currentLevel
@@ -268,9 +276,11 @@ step dt gs
     sx = lStartX currentLevel
     sy = lStartY currentLevel
 
-    marioDied = mState m6 == MDead && mY m6 < -300
-    livesAfter = max 0 (gLives gs + livesFromCoins - if marioDied then 1 else 0)
+    -- livesFromCoins only (death itself is handled by stepDeath)
+    livesAfter = gLives gs + livesFromCoins
 
+    -- deathCheck no longer triggers respawn here; just pass Mario through unchanged.
+    -- We keep the call signature for ph (Over/Play) but it won't fire while alive.
     (m7, ph) = deathCheck m6 livesAfter sx sy
 
     -- ── End conditions ───────────────────────────────────────────────────
@@ -291,38 +301,150 @@ step dt gs
     newTimer = max 0 (gTimer gs - dt)
     brickAnims' = stepBrickAnims dt (gBrickAnims gs ++ newAnims)
 
-    -- ── Respawn reset ────────────────────────────────────────────────────
-    respawning = marioDied && ph2 == Play
-    activeEnem = if respawning then lEnemies currentLevel else es4
-    activeCoins = if respawning then lCoins currentLevel else cs
-    activePups = if respawning then lPups currentLevel else pu3
-    activeTiles = if respawning then lTiles currentLevel else ts2
-    activeTimer = if respawning then 400 else newTimer
-    activeCam = if respawning then fromIntegral sW / 2 else cam
-    activeFballs = if respawning then [] else fb4
-    activeBAnims = if respawning then [] else brickAnims'
-    activePlats = if respawning then lPlatforms currentLevel else newPlats
-
     gsTemp = gs { gMario      = m7
-                , gTiles      = activeTiles
-                , gEnem       = activeEnem
-                , gPups       = activePups
-                , gCoins      = activeCoins
+                , gTiles      = ts2
+                , gEnem       = es4
+                , gPups       = pu3
+                , gCoins      = cs
                 , gScore      = sc5
                 , gLives      = livesAfter
-                , gCam        = activeCam
+                , gCam        = cam
                 , gPhase      = ph2
                 , gFirebars   = fb_stepped
-                , gFireballs  = activeFballs
-                , gTimer      = activeTimer
+                , gFireballs  = fb4
+                , gTimer      = newTimer
                 , gCoinCount  = newCoinCount
-                , gBrickAnims = activeBAnims
-                , gPlatforms  = activePlats
+                , gBrickAnims = brickAnims'
+                , gPlatforms  = newPlats
+                , gFlagOffset = gFlagOffset gs
+                , gFlagTimer  = gFlagTimer gs
+                , gDeathTimer = 0
                 }
 
-    gs' = case ph2 of
-            LevelComplete -> advanceToNextLevel gsTemp
-            _             -> gsTemp
+    gs' = gsTemp
+
+-- | While Mario is dead: animate only his bounce, freeze everything else,
+--   and wait the full 4 seconds before respawning / game-over.
+stepDeath :: Float -> GS -> GS
+stepDeath dt gs =
+  let m           = gMario gs
+      newDeathTimer = gDeathTimer gs + dt
+      currentLevel  = gLevels gs !! gLevelIdx gs
+      sx            = lStartX currentLevel
+      sy            = lStartY currentLevel
+
+      -- Keep animating Mario's death bounce (gravity pulls him down).
+      mMoved = m { mVY = max (-900) (mVY m + grav * dt)
+                 , mY  = mY m + mVY m * dt
+                 }
+
+      -- Only respawn once 4 seconds have elapsed.
+      readyToRespawn = newDeathTimer >= 4.0
+      livesAfter     = max 0 (gLives gs - 1)
+
+  in if readyToRespawn
+       then
+         let newPhase  = if livesAfter <= 0 then Over else Play
+             resetM    = m { mX = sx, mY = sy, mVX = 0, mVY = 0
+                           , mState = Small, mFace = 1, mInv = 0
+                           , mFireCool = 0, mCrouch = False
+                           , mGround = False, mSliding = False }
+             respawning = newPhase == Play
+         in gs { gMario      = if respawning then resetM else mMoved
+               , gEnem       = if respawning then lEnemies currentLevel else gEnem gs
+               , gCoins      = if respawning then lCoins   currentLevel else gCoins gs
+               , gPups       = if respawning then lPups    currentLevel else gPups  gs
+               , gTiles      = if respawning then lTiles   currentLevel else gTiles gs
+               , gPlatforms  = if respawning then lPlatforms currentLevel else gPlatforms gs
+               , gFireballs  = []
+               , gBrickAnims = []
+               , gCam        = if respawning then fromIntegral sW / 2 else gCam gs
+               , gTimer      = if respawning then 400 else gTimer gs
+               , gLives      = livesAfter
+               , gPhase      = newPhase
+               , gDeathTimer = 0
+               }
+       else gs { gMario = mMoved, gDeathTimer = newDeathTimer }
+
+-- | Animate the end-of-level sequence:
+--   Phase 1: flag and Mario slide DOWN the pole together (Mario faces left).
+--   Phase 2: Mario lands, turns right, and walks into the castle door.
+--   Advances to the next level after 7 seconds total (enough for the end song).
+stepFlagAnim :: Float -> GS -> GS
+stepFlagAnim dt gs =
+  let totalTime  = 7.0          -- seconds for full end-of-level sequence
+      -- flagStartY = 318 (flag centre at pole top, from Rendering).
+      -- Flag bottom at ground surface (Y=32): flag centre = 32+18 = 50.
+      -- Max travel = 318 - 50 = 268.
+      poleHeight = 268             -- px the flag slides before hitting ground
+      flagSpeed  = 200          -- px/s
+
+      -- Find the flagpole column (FlagBase tile at row 0)
+      poleCol    = case [ tCol t | t <- gTiles gs, tType t == FlagBase ] of
+                     (c:_) -> c
+                     []    -> 0
+      poleWorldX = fromIntegral poleCol * ts + ts / 2
+
+      -- Find the castle entrance X: door is centred in the 5-tile castle (col+2).
+      -- Stop Mario at the centre of that tile so he's visually inside the arch.
+      castleCol       = case [ tCol t | t <- gTiles gs, tType t == Castle ] of
+                          cs -> if null cs then poleCol + 4 else minimum cs
+      castleEntranceX = fromIntegral (castleCol + 2) * ts + ts / 2
+
+      newOffset  = min poleHeight (gFlagOffset gs + flagSpeed * dt)
+      flagDone   = newOffset >= poleHeight
+      newTimer   = gFlagTimer gs + dt
+
+      m          = gMario gs
+      slideSpeed = flagSpeed
+
+      -- Ground Y: Mario's centre Y when standing on the ground surface.
+      -- Ground surface = top of row-0 tile = ts = 32.
+      -- Small Mario half-height = ts/2, Big/Fire = ts. Add a few px so feet sit on top.
+      groundY = case mState m of
+                  Small -> ts + ts / 2 + 8    -- = 56
+                  _     -> ts + ts + 8        -- = 72
+
+      -- Phase 1: slide DOWN the pole.
+      -- Y decreases toward groundY; clamp with max (stop when Y reaches groundY).
+      mAfterSlide
+        | not flagDone =
+            let newY = max groundY (mY m - slideSpeed * dt)
+            in m { mX       = poleWorldX
+                 , mY       = newY
+                 , mVX      = 0
+                 , mVY      = 0
+                 , mGround  = newY <= groundY + 1
+                 , mFace    = -1    -- face left on the pole (right side of pole)
+                 , mSliding = True
+                 , mAnim    = mAnim m + dt
+                 }
+        -- Phase 2: landed — walk right into the castle door, stop there.
+        | mX m < castleEntranceX =
+            let newX = min castleEntranceX (mX m + 80 * dt)
+            in m { mX       = newX
+                 , mY       = groundY
+                 , mVX      = 80
+                 , mVY      = 0
+                 , mGround  = True
+                 , mFace    = 1
+                 , mSliding = False
+                 , mAnim    = mAnim m + dt   -- drives the run animation cycle
+                 }
+        -- Phase 3: inside the castle — stand still and wait for song to finish.
+        | otherwise =
+            m { mVX      = 0
+              , mGround  = True
+              , mFace    = 1
+              , mSliding = False
+              }
+
+  in if newTimer >= totalTime
+       then advanceToNextLevel gs
+       else gs { gFlagOffset = newOffset
+               , gFlagTimer  = newTimer
+               , gMario      = mAfterSlide
+               }
 
 advanceToNextLevel :: GS -> GS
 advanceToNextLevel gs =
@@ -343,6 +465,10 @@ advanceToNextLevel gs =
                , gTimer      = 400
                , gBrickAnims = []
                , gPlatforms  = lPlatforms nextLvl
+               , gFlagOffset = 0
+               , gFlagTimer  = 0
+               , gKeys       = KS False False False False False
+               , gDeathTimer = 0
                }
        else gs { gPhase = Win }
 

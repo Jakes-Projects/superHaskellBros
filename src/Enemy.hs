@@ -93,7 +93,7 @@ stepPiranha dt mario e timer up =
     targetY =
       if up'
         then baseY + ts
-        else baseY
+        else baseY - 72   -- descend full sprite height (48x72) below baseY to hide completely
 
     speed = ts * 1.5
     dy = targetY - eY e
@@ -332,6 +332,7 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
                                   , mVY = bounce }
           in case eType e of
             Bowser  -> hurtMario mario e acc s   -- stomp does nothing to Bowser
+            Piranha -> hurtMario mario e acc s   -- stomp does nothing to Piranha
             Goomba  -> ( marioBounce
                        , e { eState = EDead 0.5 } : acc, s + 100 )
             Koopa   -> case eState e of
@@ -344,7 +345,6 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
                 ( marioBounce { mInv = 0.3 }
                 , e { eState = EShell 5.0 False } : acc, s + 100 )
               _ -> (mario, e:acc, s)
-            Piranha    -> hurtMario mario e acc s
             CheepCheep -> hurtMario mario e acc s
             GreenCheep -> hurtMario mario e acc s
             Blooper    -> hurtMario mario e acc s
