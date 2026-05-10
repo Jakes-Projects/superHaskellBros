@@ -1,4 +1,4 @@
-module PowerUp (bumpBlocks, stepPup, grabPups, pickCoins, stepBrickAnims) where
+module PowerUp (bumpBlocks, knockPupsFromBumps, stepPup, grabPups, pickCoins, stepBrickAnims) where
 
 import Constants (ts, grav)
 import Types
@@ -47,6 +47,32 @@ bumpBlocks m vy tls pus sc
           in (tls, pus, sc, [bump], False)
         _ -> (tls, pus, sc, [], False)
     samePos a b = tCol a == tCol b && tRow a == tRow b
+
+-- | If a moving mushroom is sitting on top of a bumped block, knock it upward.
+--   This makes block bumps affect power-ups the same way they affect enemies/items
+--   in the original game feel.
+knockPupsFromBumps :: [BrickAnim] -> [PUp] -> [PUp]
+knockPupsFromBumps anims = map knock
+  where
+    bumpedBlocks = [ (c, r) | BumpAnim c r _ <- anims ]
+
+    knock p
+      | not (pAlive p) = p
+      | any (pupOverBlock p) bumpedBlocks =
+          p { pVY = max (pVY p) 420
+            , pY  = pY p + 4
+            }
+      | otherwise = p
+
+    pupOverBlock p (c, r) =
+      let blockLeft  = fromIntegral c * ts
+          blockRight = blockLeft + ts
+          blockTop   = fromIntegral (r + 1) * ts
+          pupCenterX = pX p + ts / 2
+      in pupCenterX > blockLeft
+         && pupCenterX < blockRight
+         && pY p >= blockTop - 4
+         && pY p <= blockTop + ts * 1.2
 
 -- | Advance all brick/block animations by one frame, discarding expired ones.
 stepBrickAnims :: Float -> [BrickAnim] -> [BrickAnim]

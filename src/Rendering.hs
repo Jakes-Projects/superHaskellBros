@@ -543,6 +543,7 @@ drawE spr ug clock e = case eState e of
   EDead _
     | eType e == Piranha -> blank   -- no piranha death sprite
     | otherwise          -> translate cx (eY e + 5) (if ug then spUgGoombaCrushed spr else spGoombaCrushed spr)
+  EFallDead _        -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
   EShell timer moving -> translate cx (eY e + spriteHalf) (shellPic timer moving)
   EBowser _ _ _ _     -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
   _               ->
@@ -571,9 +572,10 @@ drawEnemyBody spr ug clock e = case eType e of
   Koopa      -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr ug clock e
   Piranha    -> drawPiranha spr ug clock
   Bowser     -> drawBowser spr clock e
-  CheepCheep -> scale (marioScale * fishFace e) marioScale $ redCheepFrame   spr clock
-  GreenCheep -> scale (marioScale * fishFace e) marioScale $ greenCheepFrame spr clock
-  Blooper    -> scale marioScale marioScale $ blooperFrame spr clock
+  CheepCheep   -> scale (marioScale * fishFace e) marioScale $ redCheepFrame   spr clock
+  GreenCheep   -> scale (marioScale * fishFace e) marioScale $ greenCheepFrame spr clock
+  JumpingCheep -> scale (marioScale * fishFace e) marioScale $ redCheepFrame   spr clock
+  Blooper      -> scale marioScale marioScale $ blooperFrame spr clock
 
 goombaFrame :: Sprites -> Bool -> Float -> Picture
 goombaFrame spr ug clock =
@@ -1105,8 +1107,8 @@ drawCoins spr uw clock = pictures . map (drawCoin spr uw clock)
 
 drawCoin :: Sprites -> Bool -> Float -> (Float,Float,Bool) -> Picture
 drawCoin _   _  _     (_,_,True) = blank
-drawCoin spr uw clock (x,y,_)   =
-  translate x y $ if uw then spCoinExposed spr else coinFrame spr clock
+drawCoin spr _ _ (x,y,_)   =
+  translate x y (spCoinExposed spr)
 
 coinFrame :: Sprites -> Float -> Picture
 coinFrame spr clock =
@@ -1174,11 +1176,16 @@ drawHUD gs =
 
 drawOverlay :: GS -> Picture
 drawOverlay gs = case gPhase gs of
-  Play -> blank
-  Over -> mkOv (dark red)                 "GAME OVER" ("Lives: " ++ show (gLives gs))
-  Win  -> mkOv (makeColorI 255 215 0 255) "YOU WIN!"  ("Score: " ++ show (gScore gs))
-  _    -> blank
+  LevelIntro    -> mkOv white worldText ("MARIO x" ++ zeroPad 2 (gLives gs))
+  Play          -> blank
+  CastleComplete -> blank
+  Over          -> mkOv (dark red)                 "GAME OVER" ("Lives: " ++ show (gLives gs))
+  Win           -> mkOv (makeColorI 255 215 0 255) "YOU WIN!"  ("Score: " ++ show (gScore gs))
+  LevelComplete -> blank
   where
+    currentLevel = gLevels gs !! gLevelIdx gs
+    worldText = "WORLD " ++ show (lWorld currentLevel) ++ "-" ++ show (lNumber currentLevel)
+
     mkOv c t1 t2 = pictures
       [ color (withAlpha 0.65 black) (rectangleSolid 900 700)
       , color c     (translate (-155)   40  (scale 0.45 0.45 (text t1)))

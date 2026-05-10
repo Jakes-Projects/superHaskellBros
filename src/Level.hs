@@ -107,6 +107,16 @@ mkGreenCheep c r dir =
     EAlive
     GreenCheep
 
+mkJumpCheep :: Int -> Int -> Int -> Enemy
+mkJumpCheep c r dir =
+  Enemy
+    (fromIntegral c * ts)
+    (fromIntegral r * ts)
+    (80 * fromIntegral dir)
+    580
+    EAlive
+    JumpingCheep
+
 mkBlooper :: Int -> Int -> Enemy
 mkBlooper c r =
   Enemy
@@ -940,14 +950,14 @@ level2_3 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (198*ts) 2 3
 
     -- Reduced enemy count so the level is challenging but not overwhelming.
     enemies =
-      [ mkCheep 22 7 (-1)
-      , mkCheep 42 8 1
-      , mkCheep 66 6 (-1)
-      , mkCheep 90 8 1
-      , mkCheep 116 7 (-1)
-      , mkCheep 138 6 1
-      , mkCheep 150 8 (-1)
-      , mkCheep 162 6 1
+      [ mkJumpCheep 22  (-2) (-1)
+      , mkJumpCheep 42  (-2) 1
+      , mkJumpCheep 66  (-2) (-1)
+      , mkJumpCheep 90  (-2) 1
+      , mkJumpCheep 116 (-2) (-1)
+      , mkJumpCheep 138 (-2) 1
+      , mkJumpCheep 150 (-2) (-1)
+      , mkJumpCheep 162 (-2) 1
       ]
 
     coins = mkCoins $

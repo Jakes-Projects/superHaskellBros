@@ -7,10 +7,11 @@ import Physics (hit, mBB, tBB, eBB, solid)
 stepEnemy :: Float -> [Tile] -> Mario -> Enemy -> Enemy
 stepEnemy dt sol mario e = case eState e of
   EAlive
-    | eType e == CheepCheep -> stepCheepCheep dt sol mario e
-    | eType e == GreenCheep -> stepCheepCheep dt sol mario e
-    | eType e == Blooper    -> stepBlooper dt sol mario e
-    | otherwise             -> stepAlive dt sol mario e
+    | eType e == CheepCheep   -> stepCheepCheep dt sol mario e
+    | eType e == GreenCheep   -> stepCheepCheep dt sol mario e
+    | eType e == JumpingCheep -> stepJumpingCheep dt e
+    | eType e == Blooper      -> stepBlooper dt sol mario e
+    | otherwise               -> stepAlive dt sol mario e
 
   EBowser _ _ _ _ -> stepAlive dt sol mario e
 
@@ -18,6 +19,17 @@ stepEnemy dt sol mario e = case eState e of
     let t' = timer - dt
     in if t' <= 0 then e { eState = EDead 0 }
                   else e { eState = EDead t' }
+
+  EFallDead timer ->
+    let vy0 = eVY e + grav * dt
+        e'  = e { eX = eX e + eVX e * dt
+                , eY = eY e + vy0 * dt
+                , eVY = vy0
+                }
+        t'  = timer - dt
+    in if t' <= 0 || eY e' < (-ts * 4)
+       then e' { eState = EDead 0 }
+       else e' { eState = EFallDead t' }
 
   EShell timer moving ->
     let t' = timer - dt
@@ -125,6 +137,31 @@ stepCheepCheep dt sol _ e = e { eX = x', eY = y', eVX = vx', eVY = vy' }
     y'  = if hitY then eY e else y0
     vx' = if hitX then -vx0 else vx0
     vy' = if hitY then -vy0 else vy0
+
+
+-- | World 2-3 jumping fish.
+--   These jump from below the screen in an arc instead of swimming/flying around.
+stepJumpingCheep :: Float -> Enemy -> Enemy
+stepJumpingCheep dt e =
+  if y0 < (-ts * 2.5)
+     then e { eX = x0
+            , eY = -ts * 2
+            , eVX = vx0
+            , eVY = jumpV
+            }
+     else e { eX = x0
+            , eY = y0
+            , eVX = vx0
+            , eVY = vy0
+            }
+  where
+    vx0 = if abs (eVX e) < 1 then -85 else eVX e
+    vy0 = eVY e + grav * 0.85 * dt
+    x0  = eX e + vx0 * dt
+    y0  = eY e + vy0 * dt
+
+    -- Vary the height a little so every fish does not jump exactly the same.
+    jumpV = 560 + fromIntegral ((floor (eX e / ts) :: Int) `mod` 5) * 28
 
 
 -- | Blooper: slow underwater enemy that drifts toward Mario.
@@ -314,7 +351,8 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
       | otherwise                   = handleCollision mario e acc s
 
     shouldIgnore e = case (eType e, eState e) of
-      (_, EDead _) -> True
+      (_, EDead _)     -> True
+      (_, EFallDead _) -> True
 
       -- Hidden Piranhas should not hurt Mario.
       -- If the plant is still visibly retracting, it can still hurt him.
@@ -345,8 +383,9 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
                 ( marioBounce { mInv = 0.3 }
                 , e { eState = EShell 5.0 False } : acc, s + 100 )
               _ -> (mario, e:acc, s)
-            CheepCheep -> hurtMario mario e acc s
+            CheepCheep   -> hurtMario mario e acc s
             GreenCheep -> hurtMario mario e acc s
+            JumpingCheep -> hurtMario mario e acc s
             Blooper    -> hurtMario mario e acc s
 
       -- Kick stationary shell: Mario must be moving toward it (not just touching)

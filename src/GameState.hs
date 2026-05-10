@@ -6,7 +6,7 @@ import Types
 import Physics (solid, physicsMario, physicsMarioWater, mBB, hit, tBB)
 import Mario (inputMario, inputMarioWater, tryJump, deathCheck)
 import Enemy (stepEnemy, collideEnemies, handleShellEnemyCollisions, handleEnemyEnemyCollisions)
-import PowerUp (bumpBlocks, stepPup, grabPups, pickCoins, stepBrickAnims)
+import PowerUp (bumpBlocks, knockPupsFromBumps, stepPup, grabPups, pickCoins, stepBrickAnims)
 import Fireball (spawnFireball, stepFireball, fireballsVsEnemies)
 import Level (allLevels, initMarioFromLevel)
 
@@ -23,7 +23,7 @@ initGS =
         , gCam        = fromIntegral sW / 2
         , gKeys       = KS False False False False False
 
-        , gPhase      = Play
+        , gPhase      = LevelIntro
         , gLevelIdx   = 0
         , gLevels     = allLevels
         , gFirebars   = lFirebars startLevel
@@ -49,13 +49,14 @@ loadLevel idx gs
             , gFirebars   = lFirebars lvl
             , gFireballs  = []
             , gCam        = fromIntegral sW / 2
-            , gPhase      = Play
+            , gPhase      = LevelIntro
             , gLevelIdx   = idx
             , gTimer      = 400
             , gBrickAnims = []
             , gPlatforms  = lPlatforms lvl
             , gFlagOffset = 0
             , gFlagTimer  = 0
+            , gKeys       = KS False False False False False
             , gDeathTimer = 0
             }
   | otherwise = gs
@@ -109,9 +110,19 @@ isUnderwaterGS gs =
   let lvl = gLevels gs !! gLevelIdx gs
   in isUnderwaterLevel lvl
 
+-- | Brief world screen before every level and respawn.
+stepLevelIntro :: Float -> GS -> GS
+stepLevelIntro dt gs =
+  let t = gFlagTimer gs + dt
+  in if t >= 2.0
+       then gs { gPhase = Play, gFlagTimer = 0 }
+       else gs { gFlagTimer = t }
+
 step :: Float -> GS -> GS
 step dt gs
+  | gPhase gs == LevelIntro           = stepLevelIntro dt gs
   | gPhase gs == LevelComplete        = stepFlagAnim dt gs
+  | gPhase gs == CastleComplete       = stepCastleComplete dt gs
   | gPhase gs /= Play                 = gs
   | mState (gMario gs) == MDead       = stepDeath dt gs
   | otherwise                         = gs'
@@ -184,13 +195,15 @@ step dt gs
       bumpBlocks m3 (mVY m0) (gTiles gs) (gPups gs) sc2
 
     m3' = if brickBroke then m3 { mVY = -50 } else m3
-    pu2 = map (stepPup dt (filter (solid . tType) ts2)) pu1
+    pu1' = knockPupsFromBumps newAnims pu1
+    pu2 = map (stepPup dt (filter (solid . tType) ts2)) pu1'
     (m4, pu3, sc4) = grabPups m3' pu2 sc3
 
     -- ── Coin counter & 1-up ──────────────────────────────────────────────
     prevCollected  = length (filter (\(_,_,c) -> c) (gCoins gs))
     nowCollected   = length (filter (\(_,_,c) -> c) cs)
-    newCoins       = nowCollected - prevCollected
+    blockCoins     = length [ () | CoinPopAnim _ _ _ _ <- newAnims ]
+    newCoins       = nowCollected - prevCollected + blockCoins
     rawCoinCount   = gCoinCount gs + newCoins
     coinBonus      = rawCoinCount `div` 100
     newCoinCount   = rawCoinCount `mod` 100
@@ -288,14 +301,22 @@ step dt gs
     touchedAxe = any (\t -> tType t == Axe && hit (mBB m7) (tBB t)) (gTiles gs)
     bowserDead =
       any
-        (\e -> eType e == Bowser && case eState e of { EDead _ -> True; _ -> False })
+        (\e -> eType e == Bowser && case eState e of { EDead _ -> True; EFallDead _ -> True; _ -> False })
         es4
 
+    castleComplete = touchedAxe || bowserDead
+
+    dropBowserIntoLava e
+      | eType e == Bowser = e { eState = EFallDead 1.8, eVX = 0, eVY = 120 }
+      | otherwise         = e
+
+    es5 = if touchedAxe then map dropBowserIntoLava es4 else es4
+
     ph2
-      | touchedAxe || bowserDead  = Win
-      | ph == Over                = Over
+      | castleComplete              = CastleComplete
+      | ph == Over                  = Over
       | ph == Play && mX m7 >= endX = LevelComplete
-      | otherwise                 = ph
+      | otherwise                   = ph
 
     fb_stepped = map (stepFirebar dt) (gFirebars gs)
     newTimer = max 0 (gTimer gs - dt)
@@ -303,7 +324,7 @@ step dt gs
 
     gsTemp = gs { gMario      = m7
                 , gTiles      = ts2
-                , gEnem       = es4
+                , gEnem       = es5
                 , gPups       = pu3
                 , gCoins      = cs
                 , gScore      = sc5
@@ -317,7 +338,7 @@ step dt gs
                 , gBrickAnims = brickAnims'
                 , gPlatforms  = newPlats
                 , gFlagOffset = gFlagOffset gs
-                , gFlagTimer  = gFlagTimer gs
+                , gFlagTimer  = if ph2 == CastleComplete then 0 else gFlagTimer gs
                 , gDeathTimer = 0
                 }
 
@@ -344,7 +365,7 @@ stepDeath dt gs =
 
   in if readyToRespawn
        then
-         let newPhase  = if livesAfter <= 0 then Over else Play
+         let newPhase  = if livesAfter <= 0 then Over else LevelIntro
              resetM    = m { mX = sx, mY = sy, mVX = 0, mVY = 0
                            , mState = Small, mFace = 1, mInv = 0
                            , mFireCool = 0, mCrouch = False
@@ -363,9 +384,25 @@ stepDeath dt gs =
                , gTimer      = if respawning then 400 else gTimer gs
                , gLives      = livesAfter
                , gPhase      = newPhase
+               , gKeys       = KS False False False False False
                , gDeathTimer = 0
                }
        else gs { gMario = mMoved, gDeathTimer = newDeathTimer }
+
+-- | Castle completion: after the axe/Bowser defeat, let Bowser visibly fall
+--   before moving on. World 1-4 advances to 2-1; World 2-4 ends the game.
+stepCastleComplete :: Float -> GS -> GS
+stepCastleComplete dt gs =
+  let currentLevel = gLevels gs !! gLevelIdx gs
+      finalCastle  = lWorld currentLevel == 2 && lNumber currentLevel == 4
+      t            = gFlagTimer gs + dt
+      es'          = map (stepEnemy dt [] (gMario gs)) (gEnem gs)
+      gs'          = gs { gEnem = es', gFlagTimer = t }
+  in if t >= 2.0
+       then if finalCastle
+              then gs' { gPhase = Win, gFlagTimer = 0 }
+              else advanceToNextLevel (gs' { gFlagTimer = 0 })
+       else gs'
 
 -- | Animate the end-of-level sequence:
 --   Phase 1: flag and Mario slide DOWN the pole together (Mario faces left).
@@ -447,13 +484,23 @@ stepFlagAnim dt gs =
                , gMario      = mAfterSlide
                }
 
+initMarioForNextLevel :: Level -> Mario -> Mario
+initMarioForNextLevel lvl oldMario =
+  let base = initMarioFromLevel lvl
+      keptState = case mState oldMario of
+                    MDead -> Small
+                    st    -> st
+  in base { mState = keptState
+          , mJoeMode = mJoeMode oldMario && keptState == Fire
+          }
+
 advanceToNextLevel :: GS -> GS
 advanceToNextLevel gs =
   let nextIdx = gLevelIdx gs + 1
   in if nextIdx < length (gLevels gs)
        then
          let nextLvl = gLevels gs !! nextIdx
-         in gs { gMario      = initMarioFromLevel nextLvl
+         in gs { gMario      = initMarioForNextLevel nextLvl (gMario gs)
                , gTiles      = lTiles nextLvl
                , gEnem       = lEnemies nextLvl
                , gPups       = lPups nextLvl
@@ -461,7 +508,7 @@ advanceToNextLevel gs =
                , gFirebars   = lFirebars nextLvl
                , gFireballs  = []
                , gCam        = fromIntegral sW / 2
-               , gPhase      = Play
+               , gPhase      = LevelIntro
                , gLevelIdx   = nextIdx
                , gTimer      = 400
                , gBrickAnims = []

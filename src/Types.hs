@@ -11,12 +11,14 @@ data TType = Ground | Brick | QBlock QContent | Used
 
 data Tile = Tile { tCol :: Int, tRow :: Int, tType :: TType } deriving Show
 
-data EType = Goomba | Koopa | Piranha | Bowser | CheepCheep | GreenCheep | Blooper
+data EType = Goomba | Koopa | Piranha | Bowser | CheepCheep | GreenCheep | JumpingCheep | Blooper
   deriving (Eq, Show)
 
 data EnemyState
   = EAlive
   | EDead Float
+  | EFallDead Float
+      -- enemy has been knocked upward and is falling off the map
   | EShell Float Bool
   | EPiranha Float Bool
   | EBowser Float Float Float Int
@@ -68,7 +70,7 @@ data Fireball = Fireball
 
 data KS = KS { kL, kR, kJ, kRun, kD :: Bool } deriving Show
 
-data Phase = Play | Over | Win | LevelComplete deriving (Eq, Show)
+data Phase = LevelIntro | Play | Over | Win | LevelComplete | CastleComplete deriving (Eq, Show)
 
 -- | A transient block animation.
 --   BumpAnim  col row timer  — block bounces up (timer counts down from ~0.12s)

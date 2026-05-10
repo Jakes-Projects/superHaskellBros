@@ -148,17 +148,23 @@ checkVsEnemies fb = foldr go (False, [], 0)
 
     isImmune e = case (eType e, eState e) of
       (_, EDead _)                -> True
+      (_, EFallDead _)            -> True
       (Piranha, EPiranha _ False) -> True
       _                           -> False
 
-    killEnemy e = e { eState = EDead 0.5 }
+    killEnemy e =
+      let dir = if fiVX fb >= 0 then 1 else -1 :: Int
+      in e { eState = EFallDead 1.2
+           , eVX = 90 * fromIntegral dir
+           , eVY = 360
+           }
 
     hitBowser e = case eState e of
       EBowser f j i hp ->
         let hp' = hp - 1
         in if hp' <= 0
              then
-               ( e { eState = EDead 0.8
+               ( e { eState = EFallDead 1.6
                    , eVX = 0
                    , eVY = 250
                    }
@@ -171,7 +177,7 @@ checkVsEnemies fb = foldr go (False, [], 0)
 
       -- Fallback, just in case Bowser somehow has the wrong state.
       _ ->
-        ( e { eState = EDead 0.8
+        ( e { eState = EFallDead 1.6
             , eVX = 0
             , eVY = 250
             }
