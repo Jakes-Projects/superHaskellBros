@@ -6,17 +6,25 @@ import Physics (hit, mBB, tBB, eBB, solid)
 
 stepEnemy :: Float -> [Tile] -> Mario -> Enemy -> Enemy
 stepEnemy dt sol mario e = case eState e of
-  EAlive        -> stepAlive dt sol mario e
+  EAlive
+    | eType e == CheepCheep -> stepCheepCheep dt sol mario e
+    | eType e == Blooper    -> stepBlooper dt sol mario e
+    | otherwise             -> stepAlive dt sol mario e
+
   EBowser _ _ _ -> stepAlive dt sol mario e
-  EDead timer -> let t' = timer - dt
-                 in if t' <= 0 then e { eState = EDead 0 }
-                               else e { eState = EDead t' }
+
+  EDead timer ->
+    let t' = timer - dt
+    in if t' <= 0 then e { eState = EDead 0 }
+                  else e { eState = EDead t' }
+
   EShell timer moving ->
     let t' = timer - dt
         e' = if moving then stepShellMoving dt sol e else stepShellStationary dt sol e
     in if t' <= 0 && not moving
        then e' { eState = EAlive, eVX = -70, eVY = 0 }
        else e' { eState = EShell t' moving }
+
   EPiranha timer up ->
     let t' = timer - dt
         (newUp, newTimer) = if t' <= 0
@@ -53,6 +61,65 @@ stepAlive dt sol mario e
     onG   = not (null landTiles)
     snapY = maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles)
     (ey', vy') = if onG then (snapY, 0) else (ey0, vy0)
+
+
+-- | Cheep-cheep: simple underwater fish movement.
+--   Swims horizontally and bounces off walls/solid blocks.
+stepCheepCheep :: Float -> [Tile] -> Mario -> Enemy -> Enemy
+stepCheepCheep dt sol _ e = e { eX = x', eY = y', eVX = vx', eVY = vy' }
+  where
+    vx0 = if abs (eVX e) < 1 then -90 else eVX e
+    vy0 = if abs (eVY e) < 1 then  20 else eVY e
+
+    x0 = eX e + vx0 * dt
+    y0 = eY e + vy0 * dt
+
+    bbAt x y = (x + ts/2, y + ts/2, ts*0.75, ts*0.75)
+
+    hitX = any (hit (bbAt x0 (eY e)) . tBB) sol
+    hitY = any (hit (bbAt (eX e) y0) . tBB) sol
+        || y0 < ts * 2
+        || y0 > ts * 9
+
+    x'  = if hitX then eX e else x0
+    y'  = if hitY then eY e else y0
+    vx' = if hitX then -vx0 else vx0
+    vy' = if hitY then -vy0 else vy0
+
+
+-- | Blooper: slow underwater enemy that drifts toward Mario.
+--   This is not exact NES behavior yet, but it gives the level the right feel.
+stepBlooper :: Float -> [Tile] -> Mario -> Enemy -> Enemy
+stepBlooper dt sol mario e = e { eX = x', eY = y', eVX = vx', eVY = vy' }
+  where
+    dirX :: Float
+    dirX = if mX mario < eX e then -1 else 1
+
+    dirY :: Float
+    dirY = if mY mario > eY e then 1 else -1
+
+    pulse = sin (mAnim mario * 5 + eX e / 50)
+
+    desiredVX = 45 * dirX
+    desiredVY = 65 * dirY + 30 * pulse
+
+    vx0 = eVX e * 0.92 + desiredVX * 0.08
+    vy0 = eVY e * 0.88 + desiredVY * 0.12
+
+    x0 = eX e + vx0 * dt
+    y0 = eY e + vy0 * dt
+
+    bbAt x y = (x + ts/2, y + ts/2, ts*0.75, ts*0.9)
+
+    hitX = any (hit (bbAt x0 (eY e)) . tBB) sol
+    hitY = any (hit (bbAt (eX e) y0) . tBB) sol
+        || y0 < ts * 2
+        || y0 > ts * 9
+
+    x'  = if hitX then eX e else x0
+    y'  = if hitY then eY e else y0
+    vx' = if hitX then -vx0 else vx0
+    vy' = if hitY then -vy0 else vy0
 
 -- | Bowser always faces Mario. After a 5s idle he follows Mario when
 --   within 10 tiles, otherwise paces on the bridge.
@@ -162,7 +229,7 @@ handleEnemyEnemyCollisions es = map bounce es
       | otherwise       = eVX e < 0   -- other is to the left,  e moving left
 
     isWalking e = case eState e of
-      EAlive        -> True
+      EAlive        -> eType e == Goomba || eType e == Koopa
       EBowser _ _ _ -> True
       _             -> False
 
@@ -203,7 +270,9 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
                 ( marioBounce { mInv = 0.3 }
                 , e { eState = EShell 5.0 False } : acc, s + 100 )
               _ -> (mario, e:acc, s)
-            Piranha -> hurtMario mario e acc s
+            Piranha    -> hurtMario mario e acc s
+            CheepCheep -> hurtMario mario e acc s
+            Blooper    -> hurtMario mario e acc s
 
       -- Kick stationary shell: Mario must be moving toward it (not just touching)
       | eType e == Koopa && isStationaryShell e =

@@ -11,7 +11,8 @@ data TType = Ground | Brick | QBlock QContent | Used
 
 data Tile = Tile { tCol :: Int, tRow :: Int, tType :: TType } deriving Show
 
-data EType = Goomba | Koopa | Piranha | Bowser deriving (Eq, Show)
+data EType = Goomba | Koopa | Piranha | Bowser | CheepCheep | Blooper
+  deriving (Eq, Show)
 
 data EnemyState
   = EAlive

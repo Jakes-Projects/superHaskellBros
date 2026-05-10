@@ -43,6 +43,12 @@ data Sprites = Sprites
   , spKoopa2         :: Picture
   , spKoopaShell     :: Picture
   , spKoopaResetting :: Picture
+      -- Cheep-cheep
+  , spCheepCheep1 :: Picture
+  , spCheepCheep2 :: Picture
+    -- Blooper
+  , spBlooper1    :: Picture
+  , spBlooper2    :: Picture
     -- Bowser
   , spBowser1     :: Picture
   , spBowser2     :: Picture
@@ -159,6 +165,12 @@ loadSprites = Sprites
   <*> loadPNG "assets/koopa_green_2.png"
   <*> loadPNG "assets/koopa_green_shell.png"
   <*> loadPNG "assets/koopa_green_resetting.png"
+    -- Cheep-cheep
+  <*> loadPNG "assets/cheep_cheep_1.png"
+  <*> loadPNG "assets/cheep_cheep_2.png"
+  -- Blooper
+  <*> loadPNG "assets/blooper_1.png"
+  <*> loadPNG "assets/blooper_2.png"
   -- Bowser
   <*> loadPNG "assets/bowser_1.png"
   <*> loadPNG "assets/bowser_2.png"
@@ -234,11 +246,15 @@ worldYOffset = -(fromIntegral sH / 2) + 3.0 * ts - ts   -- = -236
 
 -- ─── Top-level draw ───────────────────────────────────────────────────────────
 
--- | True when the current level uses the underground / castle theme.
+isUnderwater :: GS -> Bool
+isUnderwater gs =
+  let lvl = gLevels gs !! gLevelIdx gs
+  in lWorld lvl == 2 && lNumber lvl == 2
+
 isUnderground :: GS -> Bool
 isUnderground gs =
   let lvl = gLevels gs !! gLevelIdx gs
-  in lNumber lvl == 2 || lNumber lvl == 4
+  in not (isUnderwater gs) && (lNumber lvl == 2 || lNumber lvl == 4)
 
 draw :: Sprites -> GS -> IO Picture
 draw spr gs = return $ pictures
@@ -248,7 +264,8 @@ draw spr gs = return $ pictures
   , drawOverlay gs
   ]
   where
-    underground = isUnderground gs
+    underwater = isUnderwater gs
+    underground = isUnderground gs || underwater
     clock = mAnim (gMario gs)
     world = pictures
       [ if underground then blank else drawDecorations spr
@@ -372,10 +389,12 @@ drawE spr ug clock e = case eState e of
 
 drawEnemyBody :: Sprites -> Bool -> Float -> Enemy -> Picture
 drawEnemyBody spr ug clock e = case eType e of
-  Goomba  -> scale marioScale marioScale $ goombaFrame spr ug clock
-  Koopa   -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr ug clock e
-  Piranha -> translate 0 (ts * 0.6) drawPiranha
-  Bowser  -> drawBowser spr clock e
+  Goomba     -> scale marioScale marioScale $ goombaFrame spr ug clock
+  Koopa      -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr ug clock e
+  Piranha    -> translate 0 (ts * 0.6) drawPiranha
+  Bowser     -> drawBowser spr clock e
+  CheepCheep -> scale (marioScale * fishFace e) marioScale $ cheepFrame spr clock
+  Blooper    -> scale marioScale marioScale $ blooperFrame spr clock
 
 goombaFrame :: Sprites -> Bool -> Float -> Picture
 goombaFrame spr ug clock =
@@ -390,6 +409,21 @@ koopaFrame spr ug clock e = case eState e of
     if even (floor (clock * 8) :: Int)
       then if ug then spUgKoopa1 spr else spKoopa1 spr
       else if ug then spUgKoopa2 spr else spKoopa2 spr
+
+cheepFrame :: Sprites -> Float -> Picture
+cheepFrame spr clock =
+  if even (floor (clock * 8) :: Int)
+    then spCheepCheep1 spr
+    else spCheepCheep2 spr
+
+blooperFrame :: Sprites -> Float -> Picture
+blooperFrame spr clock =
+  if even (floor (clock * 6) :: Int)
+    then spBlooper1 spr
+    else spBlooper2 spr
+
+fishFace :: Enemy -> Float
+fishFace e = if eVX e >= 0 then 1 else -1
 
 -- Bowser cycles through 4 walk frames at half speed (clock * 4 mod 4).
 -- Sprite faces LEFT by default — flip when moving RIGHT (eVX > 0).
@@ -411,8 +445,12 @@ koopaFace e = if eVX e >= 0 then 1 else -1
 
 drawSkyFor :: GS -> Picture
 drawSkyFor gs
-  | isUnderground gs = color black     (rectangleSolid (fromIntegral sW) (fromIntegral sH))
-  | otherwise        = color skyBlue   (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+  | isUnderwater gs = color waterBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+  | isUnderground gs = color black (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+  | otherwise = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+
+waterBlue :: Color
+waterBlue = makeColorI 30 90 190 255
 
 drawSky :: Picture
 drawSky = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))

@@ -1,4 +1,4 @@
-module Mario (inputMario, tryJump, deathCheck) where
+module Mario (inputMario, inputMarioWater, tryJump, deathCheck) where
 
 import Constants (walkSpd, runSpd, jumpV)
 import Types
@@ -21,6 +21,23 @@ inputMario ks m
     -- Keep facing direction while crouching
     f  | crouching  = mFace m
        | kL ks      = -1
+       | kR ks      =  1
+       | otherwise  = mFace m
+
+-- | Underwater Mario controls.
+-- Slower left/right movement, no crouching, and swimming is handled in Physics.hs.
+inputMarioWater :: KS -> Mario -> Mario
+inputMarioWater ks m
+  | mState m == MDead = m
+  | otherwise = m { mVX = vx, mFace = f, mCrouch = False }
+  where
+    spd = if kRun ks then 155 else 115
+
+    vx | kL ks      = -spd
+       | kR ks      =  spd
+       | otherwise  = mVX m * 0.92
+
+    f  | kL ks      = -1
        | kR ks      =  1
        | otherwise  = mFace m
 
