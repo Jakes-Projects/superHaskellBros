@@ -19,7 +19,8 @@ data EnemyState
   | EDead Float
   | EShell Float Bool
   | EPiranha Float Bool
-  | EBowser Float Float Float   -- fireTimer, jumpTimer, idleTimer (counts down from 5)
+  | EBowser Float Float Float Int
+      -- fireTimer, jumpTimer, idleTimer, hitPoints
   deriving (Eq, Show)
 
 data Enemy = Enemy

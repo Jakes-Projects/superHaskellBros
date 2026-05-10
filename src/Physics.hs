@@ -16,7 +16,14 @@ tBB t = (fromIntegral (tCol t)*ts + ts/2,
          fromIntegral (tRow t)*ts + ts/2, ts, ts)
 
 eBB :: Enemy -> BB
-eBB e = (eX e + ts/2, eY e + ts/2, ts*0.78, ts*0.78)
+eBB e
+  | eType e == Bowser =
+      -- Bowser is larger than normal enemies.
+      -- eX/eY is his lower-left-ish position, so center the hitbox around his body.
+      (eX e + ts, eY e + ts, ts * 1.55, ts * 1.65)
+
+  | otherwise =
+      (eX e + ts / 2, eY e + ts / 2, ts * 0.78, ts * 0.78)
 
 solid :: TType -> Bool
 solid Ground      = True

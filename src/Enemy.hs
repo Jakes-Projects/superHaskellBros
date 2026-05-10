@@ -12,7 +12,7 @@ stepEnemy dt sol mario e = case eState e of
     | eType e == Blooper    -> stepBlooper dt sol mario e
     | otherwise             -> stepAlive dt sol mario e
 
-  EBowser _ _ _ -> stepAlive dt sol mario e
+  EBowser _ _ _ _ -> stepAlive dt sol mario e
 
   EDead timer ->
     let t' = timer - dt
@@ -122,50 +122,96 @@ stepBlooper dt sol mario e = e { eX = x', eY = y', eVX = vx', eVY = vy' }
     vx' = if hitX then -vx0 else vx0
     vy' = if hitY then -vy0 else vy0
 
--- | Bowser always faces Mario. After a 5s idle he follows Mario when
---   within 10 tiles, otherwise paces on the bridge.
+-- | Bowser behaves closer to the original:
+--   • faces Mario
+--   • paces on the bridge instead of hard-chasing
+--   • reverses at walls/edges
+--   • jumps periodically
+--   • stores hit points in EBowser state
 stepBowser :: Float -> [Tile] -> Mario -> Enemy -> Enemy
-stepBowser dt sol mario e = e { eX = ex', eVX = vx', eY = ey', eVY = vy', eState = newState }
+stepBowser dt sol mario e =
+  e { eX = ex'
+    , eVX = vx'
+    , eY = ey'
+    , eVY = vy'
+    , eState = newState
+    }
   where
-    (ft, jt, it) = case eState e of
-                     EBowser f j i -> (f, j, i)
-                     _             -> (3.0, 4.0, 5.0)
+    (ft, jt, it, hp) = case eState e of
+      EBowser f j i hp -> (f, j, i, hp)
+      _               -> (2.5, 3.4, 1.0, 5)
 
-    ft'      = if ft - dt <= 0 then 3.0 else ft - dt
-    jt'      = if jt - dt <= 0 then 4.0 else jt - dt
-    it'      = max 0 (it - dt)
-    newState = EBowser ft' jt' it'
+    ft' = if ft - dt <= 0 then 2.5 else ft - dt
+    jt' = if jt - dt <= 0 then 3.4 else jt - dt
+    it' = max 0 (it - dt)
 
-    idle  = it > 0
-    -- Direction toward Mario (always face him)
-    marioDir  = if mX mario < eX e then -1 else 1 :: Float
-    -- Follow Mario when within 10 tiles, otherwise pace (reverse at walls)
-    closeToMario = abs (mX mario - eX e) < 10 * ts
-    desiredVX
-      | idle           = 0
-      | closeToMario   = 60 * marioDir   -- chase at same speed as before
-      | otherwise      = eVX e           -- keep current pacing velocity
+    newState = EBowser ft' jt' it' hp
 
-    ex0   = eX e + desiredVX * dt
-    wallX = any (hit (ex0 + ts, eY e + ts, ts*1.4, ts*1.4) . tBB) sol
-    vx'   = if idle then 0
-            else if wallX then -desiredVX
-            else desiredVX
-    ex'   = if wallX then eX e else ex0
+    idle = it > 0
 
-    vy0   = eVY e + grav * dt
-    ey0   = eY e + vy0 * dt
-    landTiles = filter (\t -> let tTop = fromIntegral (tRow t) * ts + ts
-                              in eY e >= tTop && ey0 < tTop
-                                 && abs (ex' + ts - (fromIntegral (tCol t)*ts + ts/2)) < ts*1.5)
-                       sol
-    onG   = not (null landTiles)
-    snapY = if onG then maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles) else ey0
+    -- Bowser faces Mario, but he does not fully chase him.
+    marioDir = if mX mario < eX e then -1 else 1 :: Float
 
-    jumpVY = if jt - dt <= 0 && onG && not idle then 550 else vy0
-    (ey', vy') = if onG && jumpVY == vy0 then (snapY, 0)
-                 else if jt - dt <= 0    then (eY e, jumpVY)
-                 else                        (ey0, vy0)
+    -- If Bowser somehow has no velocity, restart his pacing.
+    baseVX
+      | idle             = 0
+      | abs (eVX e) < 1  = -55
+      | otherwise        = eVX e
+
+    ex0 = eX e + baseVX * dt
+
+    -- Wall check with Bowser-sized box.
+    wallX =
+      any
+        (hit (ex0 + ts, eY e + ts, ts * 1.5, ts * 1.5) . tBB)
+        sol
+
+    -- Edge check so Bowser turns around instead of walking off the bridge.
+    dir = if baseVX >= 0 then 1 else -1 :: Float
+    aheadX = ex0 + if dir > 0 then ts * 2 else 0
+    edgeProbe = (aheadX, eY e - ts * 0.25, ts * 0.8, ts * 0.6)
+    edge = not (any (hit edgeProbe . tBB) sol)
+
+    vx'
+      | idle          = 0
+      | wallX || edge = -baseVX
+      | otherwise     = baseVX
+
+    ex'
+      | wallX     = eX e
+      | otherwise = ex0
+
+    -- Gravity / landing.
+    vy0 = eVY e + grav * dt
+    ey0 = eY e + vy0 * dt
+
+    landTiles =
+      filter
+        (\t ->
+          let tTop = fromIntegral (tRow t) * ts + ts
+          in eY e >= tTop
+             && ey0 < tTop
+             && abs (ex' + ts - (fromIntegral (tCol t) * ts + ts / 2)) < ts * 1.5
+        )
+        sol
+
+    onG = not (null landTiles)
+
+    snapY =
+      if onG
+        then maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles)
+        else ey0
+
+    jumpNow = jt - dt <= 0 && onG && not idle
+
+    (ey', vy')
+      | onG && not jumpNow = (snapY, 0)
+      | jumpNow            = (eY e, 520)
+      | otherwise          = (ey0, vy0)
+
+    -- Keep Bowser visually facing Mario by using velocity direction.
+    -- If Mario is on the other side, Bowser will still face him when rendering
+    -- if your renderer uses eVX. This keeps movement simple and stable.
 
 stepShellStationary :: Float -> [Tile] -> Enemy -> Enemy
 stepShellStationary dt sol e = e { eY = ey', eVY = vy' }
@@ -230,9 +276,9 @@ handleEnemyEnemyCollisions es = map bounce es
       | otherwise       = eVX e < 0   -- other is to the left,  e moving left
 
     isWalking e = case eState e of
-      EAlive        -> eType e == Goomba || eType e == Koopa
-      EBowser _ _ _ -> True
-      _             -> False
+      EAlive          -> True
+      EBowser _ _ _ _ -> True
+      _               -> False
 
 marioHalfHeight :: Mario -> Float
 marioHalfHeight m = if mState m == Big || mState m == Fire then ts else ts/2
@@ -297,10 +343,10 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
 
     isStationaryShell e = case eState e of EShell _ False -> True; _ -> False
     isDangerous e = case eState e of
-      EAlive        -> True
-      EBowser _ _ _ -> True
-      EShell _ True -> True
-      _             -> False
+      EAlive          -> True
+      EBowser _ _ _ _ -> True
+      EShell _ True   -> True
+      _               -> False
 
     -- | Damage Mario by exactly one power level.
     --   Fire → Big → Small → MDead

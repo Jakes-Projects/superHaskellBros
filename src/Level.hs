@@ -132,9 +132,17 @@ mkP :: (Int, Int) -> Enemy
 mkP (c, r) = Enemy (fromIntegral c * ts) (fromIntegral r * ts) 0 0 (EPiranha 0 False) Piranha
 
 -- | Bowser: 2-tile-wide, spawns at column c.
---   y = ts*2 places him on top of the row-1 bridge tiles (bridge top = 2*ts).
+--   y = ts*2 places him on top of the row-1 bridge tiles.
+--   EBowser timers: fireTimer, jumpTimer, idleTimer, hitPoints.
 mkBowser :: Int -> Enemy
-mkBowser c = Enemy (fromIntegral c * ts) (ts*2) (-60) 0 EAlive Bowser
+mkBowser c =
+  Enemy
+    (fromIntegral c * ts)
+    (ts * 2)
+    (-55)
+    0
+    (EBowser 2.5 3.4 1.0 5)
+    Bowser
 
 --------------------------------------------------------------------------------
 -- World 1-1
@@ -501,7 +509,7 @@ level1_4 = mkLevel tiles enemies coins pups firebars [] (ts*3) (ts*1.5) (80*ts) 
       [ mkBowser 60 ]   -- only Bowser; this is a boss level
 
     -- ── Coins ─────────────────────────────────────────────────────────────
-    coins = mkCoins
+    coins = mkCoins   
       [(2,2),(3,2),(4,2),(5,2),(6,2),(7,2),(8,2)  -- floorA path
       ,(15,2),(16,2),(17,2)                        -- before platform1
       ,(33,2),(34,2),(35,2)                        -- floorC
@@ -922,57 +930,168 @@ level2_3 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (198*ts) 2 3
 
 --------------------------------------------------------------------------------
 -- World 2-4
--- Bowser's castle: longer and harder than 1-4.
--- Two lava corridors, three firebars, more enemies, longer bridge to Bowser.
+-- Castle redesign based on the original SMB 2-4 map.
+-- More accurate pass:
+--   • cleaner castle corridor layout
+--   • firebars are centered on visible anchor blocks
+--   • no full-height blocking walls in Mario's path
+--   • more intentional lava/bridge sections
+--   • more reachable power-up chances before Bowser
+--   • distinct Bowser bridge + axe room
 --------------------------------------------------------------------------------
 
 level2_4 :: Level
-level2_4 = mkLevel tiles enemies coins [] firebars [] (ts*3) (ts*3) (95*ts) 2 4
+level2_4 = mkLevel tiles enemies coins [] firebars [] (ts*3) (ts*1.5) (148*ts) 2 4
   where
-    -- Floor sections with two lava gaps
-    floorA = mkGround 0  13
-    floorB = mkGround 18 27
-    floorC = mkGround 32 44
-    floorD = mkGround 49 58
-    floorE = mkGround 63 80
-    lava1  = [Tile c (-2) Ground | c <- [14..17]]
-    lava2  = [Tile c (-2) Ground | c <- [28..31]]
-    lava3  = [Tile c (-2) Ground | c <- [45..48]]
-    lava4  = [Tile c (-2) Ground | c <- [59..62]]
+    -- GameState treats row -2 Ground tiles as lava.
+    lava c1 c2 = [Tile c (-2) Ground | c <- [c1..c2]]
 
-    -- Bridge over the final lava stretch, leading to Bowser
-    bridge        = mkBridge 20 90
-    bridgeSupport = mkBridgePosts [20,25,30,35,40,45,50,55,60,65,70,75,80,85,90]
+    -- Center firebars on tile coordinates so they look attached to blocks.
+    firebarAt c r ang spd len =
+      Firebar
+        (fromIntegral c * ts + ts/2)
+        (fromIntegral r * ts + ts/2)
+        ang spd len
 
-    stairClimb = mkStairsUp 88 6
-    axe        = [Tile 94 1 Axe]
-    castle     = mkCastle 95
+    -- Support posts continue below the visible area.
+    posts cols =
+      concat [ [Tile c r Step | r <- [-4..0]] | c <- cols ]
 
-    tiles = floorA ++ floorB ++ floorC ++ floorD ++ floorE
-         ++ lava1 ++ lava2 ++ lava3 ++ lava4
-         ++ bridge ++ bridgeSupport
-         ++ stairClimb ++ axe ++ castle
+    -- Main castle ceiling.
+    -- These make the level feel enclosed without creating impossible walls.
+    ceiling =
+         mkRow Step 10 0 37
+      ++ mkRow Step 10 43 83
+      ++ mkRow Step 10 89 139
 
-    -- Three firebars: staggered angles so they don't all line up
+      -- Lower ceiling chunks like the original castle corridors.
+      ++ mkRow Step 8  0 9
+      ++ mkRow Step 8  18 26
+      ++ mkRow Step 8  47 57
+      ++ mkRow Step 8  70 82
+      ++ mkRow Step 8  94 104
+      ++ mkRow Step 8  118 132
+
+      -- Left entrance wall only, behind Mario's path.
+      ++ [Tile 0 r Step | r <- [1..9]]
+      ++ [Tile 1 r Step | r <- [6..9]]
+
+    -- Safe floor sections.
+    floorA = mkGround 0 16
+    floorB = mkGround 24 43
+    floorC = mkGround 52 72
+    floorD = mkGround 81 104
+
+    -- Lava sections between safe floors.
+    lavaA = lava 17 23
+    lavaB = lava 44 51
+    lavaC = lava 73 80
+    lavaFinal = lava 105 140
+
+    -- Small bridges/platforms over lava.
+    -- These are simple and readable instead of cluttered.
+    lavaPlatforms =
+         mkRow Step 1 18 21
+      ++ mkRow Step 2 46 49
+      ++ mkRow Step 2 75 78
+
+    -- Middle castle structures.
+    -- Kept clear of the main walking lane.
+    middlePlatforms =
+         mkRow Step 4 55 60
+      ++ mkRow Step 5 63 67
+      ++ mkRow Step 4 92 101
+
+    -- Visible anchor blocks for firebars.
+    -- Each firebar below is centered on one of these blocks.
+    firebarAnchors =
+         [Tile 20 2 Step]     -- early lava firebar
+      ++ [Tile 56 4 Step]     -- middle platform firebar
+      ++ [Tile 96 4 Step]     -- pre-Bowser corridor firebar
+      ++ [Tile 121 1 Step]    -- Bowser bridge firebar, part of bridge area
+
+    -- Power-up blocks.
+    -- QPower gives Mushroom if Small, Fire Flower if Big/Fire.
+    blocks =
+         -- Early power-up.
+         mkQPower 3 8 8
+      ++ mkQCoin  3 9 10
+
+         -- Middle power-up.
+      ++ mkQPower 4 32 32
+      ++ mkQCoin  4 33 34
+
+         -- Pre-Bowser power-up.
+      ++ mkQPower 4 96 96
+      ++ mkQCoin  4 97 98
+
+    -- Small recovery / approach before the Bowser bridge.
+    bridgeApproach =
+         mkGround 100 104
+
+    -- Final Bowser bridge over lava.
+    bowserBridge = mkBridge 105 136
+    bowserBridgePosts = posts [105,109,113,117,121,125,129,133,136]
+
+    -- Axe and ending room.
+    axe = [Tile 140 1 Axe]
+
+    endRoom =
+         mkGround 142 150
+      ++ mkRow Step 10 142 150
+      ++ [Tile 142 r Step | r <- [1..9]]
+      ++ mkCastle 145
+
+    tiles =
+         ceiling
+      ++ floorA ++ floorB ++ floorC ++ floorD
+      ++ lavaA ++ lavaB ++ lavaC ++ lavaFinal
+      ++ lavaPlatforms
+      ++ middlePlatforms
+      ++ firebarAnchors
+      ++ blocks
+      ++ bridgeApproach
+      ++ bowserBridge
+      ++ bowserBridgePosts
+      ++ axe
+      ++ endRoom
+
+    -- Firebars centered on visible anchor blocks.
     firebars =
-      [ Firebar (24*ts) (3*ts) 0.00 2.6 4
-      , Firebar (44*ts) (3*ts) 1.05 2.2 5
-      , Firebar (68*ts) (3*ts) 2.10 2.0 5
+      [ firebarAt 20 2 0.00 2.2 3
+      , firebarAt 56 4 1.10 2.0 3
+      , firebarAt 96 4 2.40 2.1 3
+      , firebarAt 121 1 1.40 2.0 4
       ]
 
+    -- Castle danger comes from lava, firebars, and Bowser.
     enemies =
-      [ Enemy (6*ts)  ts      (-80) 0 EAlive Goomba
-      , Enemy (9*ts)  ts      (-80) 0 EAlive Goomba
-      , Enemy (20*ts) (ts*2)  (-70) 0 EAlive Koopa  -- on bridge
-      , Enemy (35*ts) (ts*2)  (-70) 0 EAlive Koopa  -- on bridge
-      , Enemy (55*ts) (ts*2)  (-80) 0 EAlive Goomba -- on bridge
-      , Enemy (58*ts) (ts*2)  (-80) 0 EAlive Goomba -- on bridge
-      , mkBowser 80                                  -- Bowser on bridge
-      ]
+      [ mkBowser 124 ]
 
     coins = mkCoins
-      [(5,2),(6,2),(7,2),(8,2),(22,2),(26,2),(34,2),(38,2),(50,2),(54,2)]
+      [ -- early corridor coins
+        (6,4),(7,4)
 
+        -- early power-up guide coins
+      , (8,5),(9,5),(10,5)
+
+        -- first lava section reward
+      , (18,4),(19,4),(20,4)
+
+        -- middle power-up guide coins
+      , (31,6),(32,6),(33,6),(34,6)
+
+        -- middle platform coins
+      , (55,6),(56,6),(57,6)
+      , (64,7),(65,7),(66,7)
+
+        -- third lava / pre-Bowser coins
+      , (76,5),(77,5),(78,5)
+      , (95,6),(96,6),(97,6),(98,6)
+
+        -- Bowser bridge coins, spaced out
+      , (110,3),(118,3),(126,3)
+      ]
 --------------------------------------------------------------------------------
 -- All levels exported
 --------------------------------------------------------------------------------

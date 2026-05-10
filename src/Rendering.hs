@@ -474,7 +474,7 @@ drawE :: Sprites -> Bool -> Float -> Enemy -> Picture
 drawE spr ug clock e = case eState e of
   EDead _         -> translate cx (eY e + 5)          (if ug then spUgGoombaCrushed spr else spGoombaCrushed spr)
   EShell timer moving -> translate cx (eY e + spriteHalf) (shellPic timer moving)
-  EBowser _ _ _   -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
+  EBowser _ _ _ _ -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
   _               ->
     if shouldDrawAlive (eState e)
       then translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
@@ -538,18 +538,33 @@ blooperFrame spr clock =
 fishFace :: Enemy -> Float
 fishFace e = if eVX e >= 0 then 1 else -1
 
--- Bowser cycles through 4 walk frames at half speed (clock * 4 mod 4).
--- Sprite faces LEFT by default — flip when moving RIGHT (eVX > 0).
+-- Bowser cycles through walk frames and uses fire frames near the end of
+-- his fire timer. This gives him a more original-style boss feel even before
+-- adding actual Bowser fire projectiles.
 drawBowser :: Sprites -> Float -> Enemy -> Picture
 drawBowser spr clock e =
-  let frame   = (floor (clock * 4) :: Int) `mod` 4
+  let frame = (floor (clock * 4) :: Int) `mod` 4
+
       walkPic = case frame of
-                  0 -> spBowser1 spr
-                  1 -> spBowser2 spr
-                  2 -> spBowser3 spr
-                  _ -> spBowser4 spr
-      facing  = if eVX e > 0 then -1 else 1 :: Float
-  in scale (marioScale * facing) marioScale walkPic
+        0 -> spBowser1 spr
+        1 -> spBowser2 spr
+        2 -> spBowser3 spr
+        _ -> spBowser4 spr
+
+      firePic =
+        if even (floor (clock * 8) :: Int)
+          then spBowserFire1 spr
+          else spBowserFire2 spr
+
+      firePose = case eState e of
+        EBowser f _ _ _ -> f <= 0.45
+        _               -> False
+
+      pic = if firePose then firePic else walkPic
+
+      facing = if eVX e > 0 then -1 else 1 :: Float
+
+  in scale (marioScale * facing) marioScale pic
 
 koopaFace :: Enemy -> Float
 koopaFace e = if eVX e >= 0 then 1 else -1

@@ -97,11 +97,8 @@ stepFireball dt sol fb
 -- ─── Enemy collision ─────────────────────────────────────────────────────────
 
 -- | Check every active fireball against every vulnerable enemy.
---   Returns (updated fireballs, updated enemies, score delta).
---   Bowser can be defeated by fireballs (5 fireballs in the original;
---   here each fireball hit kills him, consistent with the axe being
---   a one-hit mechanic too).  Either killing Bowser or touching the
---   axe triggers Win in GameState.
+--   Bowser takes 5 fireball hits before dying.
+--   Touching the axe still defeats Bowser through GameState.
 fireballsVsEnemies :: [Fireball] -> [Enemy] -> Int
                    -> ([Fireball], [Enemy], Int)
 fireballsVsEnemies fbs es sc = (fbs', es', sc')
@@ -119,16 +116,47 @@ fireballsVsEnemies fbs es sc = (fbs', es', sc')
 checkVsEnemies :: Fireball -> [Enemy] -> (Bool, [Enemy], Int)
 checkVsEnemies fb = foldr go (False, [], 0)
   where
-    fiBB = (fiX fb, fiY fb, fireballHalf*2, fireballHalf*2)
+    fiBB = (fiX fb, fiY fb, fireballHalf * 2, fireballHalf * 2)
 
     go e (didHit, accEs, pts)
+      -- One fireball should only count as one enemy hit.
+      | didHit                  = (didHit, e : accEs, pts)
       | isImmune e              = (didHit, e : accEs, pts)
       | not (hit fiBB (eBB e))  = (didHit, e : accEs, pts)
-      | otherwise               = (True,   killEnemy e : accEs, pts + 200)
+      | eType e == Bowser       =
+          let (e', scoreDelta) = hitBowser e
+          in (True, e' : accEs, pts + scoreDelta)
+      | otherwise               =
+          (True, killEnemy e : accEs, pts + 200)
 
     isImmune e = case (eType e, eState e) of
-      (_, EDead _)                -> True   -- already dead
-      (Piranha, EPiranha _ False) -> True   -- retracted Piranha can't be hit
-      _                           -> False  -- everything else (incl. Bowser) is vulnerable
+      (_, EDead _)                -> True
+      (Piranha, EPiranha _ False) -> True
+      _                           -> False
 
     killEnemy e = e { eState = EDead 0.5 }
+
+    hitBowser e = case eState e of
+      EBowser f j i hp ->
+        let hp' = hp - 1
+        in if hp' <= 0
+             then
+               ( e { eState = EDead 0.8
+                   , eVX = 0
+                   , eVY = 250
+                   }
+               , 5000
+               )
+             else
+               ( e { eState = EBowser f j i hp' }
+               , 500
+               )
+
+      -- Fallback, just in case Bowser somehow has the wrong state.
+      _ ->
+        ( e { eState = EDead 0.8
+            , eVX = 0
+            , eVY = 250
+            }
+        , 5000
+        )
