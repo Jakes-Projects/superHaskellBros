@@ -54,6 +54,7 @@ data Mario = Mario
   , mSwimAnim   :: Int     -- swim animation frame (0-4), advances each stroke
   , mSwimming   :: Bool    -- True when swim button is held
   , mSliding    :: Bool    -- True while sliding down the end-of-level flagpole
+  , mSkidding   :: Bool    -- True while braking hard (opposite direction input)
   } deriving Show
 
 -- | A fireball shot by Fire Mario.

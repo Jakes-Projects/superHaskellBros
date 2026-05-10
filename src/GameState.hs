@@ -139,7 +139,7 @@ step dt gs
     m0 =
       if underwater
         then inputMarioWater ks mPreMoved
-        else inputMario ks mPreMoved
+        else inputMario dt ks mPreMoved
 
     m1 =
       if mState m0 == MDead
@@ -348,7 +348,8 @@ stepDeath dt gs =
              resetM    = m { mX = sx, mY = sy, mVX = 0, mVY = 0
                            , mState = Small, mFace = 1, mInv = 0
                            , mFireCool = 0, mCrouch = False
-                           , mGround = False, mSliding = False }
+                           , mGround = False, mSliding = False
+                           , mSkidding = False }
              respawning = newPhase == Play
          in gs { gMario      = if respawning then resetM else mMoved
                , gEnem       = if respawning then lEnemies currentLevel else gEnem gs

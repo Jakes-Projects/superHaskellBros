@@ -122,6 +122,7 @@ data Sprites = Sprites
   , spJoeRun3     :: Picture
   , spJoeJump     :: Picture
   , spJoeCrouch   :: Picture
+  , spJoeSkid     :: Picture
   , spJoeShoot    :: Picture
   , spJoeFireball1 :: Picture
   , spJoeFireball2 :: Picture
@@ -291,6 +292,7 @@ loadSprites = Sprites
   <*> loadPNG "assets/joe_fire_run_3.png"
   <*> loadPNG "assets/joe_fire_jump.png"
   <*> loadPNG "assets/joe_fire_crouch.png"
+  <*> loadPNG "assets/joe_fire_skid.png"
   <*> loadPNG "assets/joe_fire_fireball_shoot.png"
   <*> loadPNG "assets/fireball_haskell_1.png"
   <*> loadPNG "assets/fireball_haskell_2.png"
@@ -435,7 +437,7 @@ drawMario spr m
   | blink = blank
   | otherwise =
       translate (mX m) drawY
-        $ scale (marioScale * fromIntegral (mFace m)) marioScale
+        $ scale (marioScale * fromIntegral (if mSkidding m then -(mFace m) else mFace m)) marioScale
         $ pickMarioFrame spr m
   where
     blink  = mInv m > 1.0 && even (floor (mInv m * 10) :: Int)
@@ -460,14 +462,15 @@ pickMarioFrame spr m
       shooting  = mFireCool m > 0.2
       swimming  = mSwimming m
       swimFrame = mSwimAnim m
+      skidding  = mSkidding m
   in case mState m of
        Big   -> if swimming then pickSwimFrame (bigSwimSprites   spr) swimFrame
-                            else pickBigFrame  spr airborne still crouching wFrame
+                            else pickBigFrame  spr airborne still crouching skidding wFrame
        Fire  -> if swimming then pickSwimFrame (if joe then joeSwimSprites spr
                                                        else fireSwimSprites spr) swimFrame
-                            else pickFireFrame spr joe shooting airborne still crouching wFrame
+                            else pickFireFrame spr joe shooting airborne still crouching skidding wFrame
        _     -> if swimming then pickSwimFrame (smallSwimSprites spr) swimFrame
-                            else pickSmallFrame spr airborne still wFrame
+                            else pickSmallFrame spr airborne still skidding wFrame
 
 -- | Select one of 5 swim sprites based on the current stroke frame.
 pickSwimFrame :: [Picture] -> Int -> Picture
@@ -485,39 +488,43 @@ fireSwimSprites spr = [spFireSwim1 spr, spFireSwim2 spr, spFireSwim3 spr, spFire
 joeSwimSprites :: Sprites -> [Picture]
 joeSwimSprites spr = [spJoeSwim1 spr, spJoeSwim2 spr, spJoeSwim3 spr, spJoeSwim4 spr, spJoeSwim5 spr]
 
-pickSmallFrame :: Sprites -> Bool -> Bool -> Int -> Picture
-pickSmallFrame spr airborne still wFrame
-  | airborne  = spMarioJump  spr
-  | still     = spMarioStand spr
+pickSmallFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
+pickSmallFrame spr airborne still skidding wFrame
+  | airborne    = spMarioJump  spr
+  | skidding    = spMarioSkid  spr
+  | still       = spMarioStand spr
   | wFrame == 0 = spMarioRun1 spr
   | wFrame == 1 = spMarioRun2 spr
   | otherwise   = spMarioRun3 spr
 
-pickBigFrame :: Sprites -> Bool -> Bool -> Bool -> Int -> Picture
-pickBigFrame spr airborne still crouching wFrame
+pickBigFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
+pickBigFrame spr airborne still crouching skidding wFrame
   | crouching   = spBigCrouch spr
   | airborne    = spBigJump   spr
+  | skidding    = spBigSkid   spr
   | still       = spBigStand  spr
   | wFrame == 0 = spBigRun1   spr
   | wFrame == 1 = spBigRun2   spr
   | otherwise   = spBigRun3   spr
 
-pickFireFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
-pickFireFrame spr joe shooting airborne still crouching wFrame
-  | joe       = pickJoeFrame  spr shooting airborne still crouching wFrame
+pickFireFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
+pickFireFrame spr joe shooting airborne still crouching skidding wFrame
+  | joe       = pickJoeFrame  spr shooting airborne still crouching skidding wFrame
   | shooting  = spFireShoot   spr
   | crouching = spFireCrouch  spr
   | airborne  = spFireJump    spr
+  | skidding  = spFireSkid    spr
   | still     = spFireStand   spr
   | wFrame == 0 = spFireRun1  spr
   | wFrame == 1 = spFireRun2  spr
   | otherwise   = spFireRun3  spr
 
-pickJoeFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
-pickJoeFrame spr shooting airborne still crouching wFrame
+pickJoeFrame :: Sprites -> Bool -> Bool -> Bool -> Bool -> Bool -> Int -> Picture
+pickJoeFrame spr shooting airborne still crouching skidding wFrame
   | shooting    = spJoeShoot  spr
   | crouching   = spJoeCrouch spr
   | airborne    = spJoeJump   spr
+  | skidding    = spJoeSkid   spr
   | still       = spJoeStand  spr
   | wFrame == 0 = spJoeRun1   spr
   | wFrame == 1 = spJoeRun2   spr
@@ -890,8 +897,8 @@ drawFlagpoles spr flagOff tiles = pictures (map drawOnePole poleColumns)
       let poleX    = fromIntegral c * ts + ts / 2
           flagY    = flagStartY - flagOff
       in pictures
-           [ translate poleX poleCentreY (scale sc sc (spFlagpole spr))
-           , translate (poleX + 18) flagY (spFlag spr)
+           [ translate (poleX + 18) flagY (spFlag spr)
+           , translate poleX poleCentreY (scale sc sc (spFlagpole spr))
            ]
 
 -- | Draw overworld end-of-level castles.
