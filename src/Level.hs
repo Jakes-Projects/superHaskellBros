@@ -39,6 +39,19 @@ mkPipe c h =
   [Tile c r t | (r,t) <- zip [1..h] (replicate (h-1) Pipe ++ [PipeTop])]
   ++ [Tile (c+1) r PipeR | r <- [1..h]]
 
+-- | Piranha in a pipe.
+--   Use the SAME values as mkPipe:
+--   mkPipe c h  ==>  mkP (c, h)
+--
+--   eX is shifted by ts/2 so the plant is centered between the
+--   left and right pipe columns.
+--   eVY stores the fixed hidden/base Y position.
+mkP :: (Int, Int) -> Enemy
+mkP (c, h) =
+  let baseY = fromIntegral h * ts - ts * 0.45
+      x     = fromIntegral c * ts + ts / 2
+  in Enemy x baseY 0 baseY (EPiranha 1.2 False) Piranha
+
 mkPipeGroup :: [(Int,Int)] -> [Tile]
 mkPipeGroup = concatMap (uncurry mkPipe)
 
@@ -127,9 +140,6 @@ mkK c = Enemy (fromIntegral c * ts) ts (-70) 0 EAlive Koopa
 
 mkKAt :: Int -> Int -> Enemy
 mkKAt c r = Enemy (fromIntegral c * ts) (fromIntegral r * ts) (-70) 0 EAlive Koopa
-
-mkP :: (Int, Int) -> Enemy
-mkP (c, r) = Enemy (fromIntegral c * ts) (fromIntegral r * ts) 0 0 (EPiranha 0 False) Piranha
 
 -- | Bowser: 2-tile-wide, spawns at column c.
 --   y = ts*2 places him on top of the row-1 bridge tiles.
@@ -229,8 +239,8 @@ level1_1 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (198*ts) 1 1
          map mkG [22, 35, 42, 53, 62, 78, 84, 100, 106, 110, 116, 144, 160]
       -- Koopas in wider open stretches
       ++ map mkK [64, 92, 130]
-      -- Piranhas in each pipe: heights are pipe_height - 1 (row inside pipe top)
-      ++ map mkP [(28,1),(38,2),(46,3),(57,3),(163,1)]
+      -- Piranhas in each pipe: use the same (column, height) as mkPipe
+      ++ map mkP [(28,2),(38,3),(46,4),(57,4),(163,2)]
 
     -- Coins: pre-placed coins are empty; ? block coins fly out on bump.
     coins = mkCoins []
@@ -368,9 +378,9 @@ level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*1.5) (200*ts) 
       , mkG  96
       , mkG 128
       , mkG 152
-      , mkP (178, 2)
-      , mkP (182, 2)
-      , mkP (186, 2)
+      , mkP (178, 3)
+      , mkP (182, 3)
+      , mkP (186, 3)
       ]
 
     -- ── Coins ─────────────────────────────────────────────────────────────
@@ -625,7 +635,7 @@ level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
     enemies =
          map mkG [18,27,44,60,77,87,105,118,137,147,162,181,187]
       ++ map mkK [34,69,112,154,176]
-      ++ map mkP [(39,1),(54,2),(134,2),(150,3),(169,2)]
+      ++ map mkP [(39,2),(54,3),(134,3),(150,4),(169,3)]
 
     coins = mkCoins $
          -- Early coin lines above reachable blocks.

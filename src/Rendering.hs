@@ -476,7 +476,7 @@ drawE spr ug clock e = case eState e of
   EShell timer moving -> translate cx (eY e + spriteHalf) (shellPic timer moving)
   EBowser _ _ _ _ -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
   _               ->
-    if shouldDrawAlive (eState e)
+    if shouldDrawAlive e
       then translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
       else blank
   where
@@ -488,10 +488,13 @@ drawE spr ug clock e = case eState e of
       | timer <= 2.0     = if ug then spUgKoopaResetting spr else spKoopaResetting spr
       | otherwise        = if ug then spUgKoopaShell spr     else spKoopaShell spr
 
-    shouldDrawAlive st = case st of
-      EAlive        -> True
-      EPiranha _ up -> up
-      _             -> False
+    shouldDrawAlive en = case eState en of
+      EAlive -> True
+
+      EPiranha _ up ->
+        up || eY en > eVY en + 2
+
+      _ -> False
 
 drawEnemyBody :: Sprites -> Bool -> Float -> Enemy -> Picture
 drawEnemyBody spr ug clock e = case eType e of

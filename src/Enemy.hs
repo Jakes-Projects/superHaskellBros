@@ -27,13 +27,7 @@ stepEnemy dt sol mario e = case eState e of
        else e' { eState = EShell t' moving }
 
   EPiranha timer up ->
-    let t' = timer - dt
-        (newUp, newTimer) = if t' <= 0
-                            then (not up, if up then 2.0 else 1.5)
-                            else (up, t')
-        baseY = fromIntegral (floor (eY e / ts)) * ts
-        targetY = if newUp then baseY + ts else baseY
-    in e { eState = EPiranha newTimer newUp, eY = targetY }
+    stepPiranha dt mario e timer up
 
 stepAlive :: Float -> [Tile] -> Mario -> Enemy -> Enemy
 stepAlive dt sol mario e
@@ -63,6 +57,51 @@ stepAlive dt sol mario e
     snapY = maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles)
     (ey', vy') = if onG then (snapY, 0) else (ey0, vy0)
 
+-- | Piranha plant behavior.
+--   eVY stores the fixed base Y so the plant does not drift upward forever.
+--   The plant stays hidden if Mario is close to the pipe.
+stepPiranha :: Float -> Mario -> Enemy -> Float -> Bool -> Enemy
+stepPiranha dt mario e timer up =
+  e { eY = y'
+    , eVY = baseY
+    , eState = EPiranha timer'' up'
+    }
+  where
+    baseY =
+      if eVY e == 0
+        then eY e
+        else eVY e
+
+    pipeCenterX = eX e + ts
+    marioNearPipe = abs (mX mario - pipeCenterX) < ts * 2.25
+
+    timer' = timer - dt
+
+    (up', timer'')
+      | not up && marioNearPipe =
+          (False, 1.2)
+
+      | timer' <= 0 && up =
+          (False, 1.4)
+
+      | timer' <= 0 && not up =
+          (True, 1.8)
+
+      | otherwise =
+          (up, timer')
+
+    targetY =
+      if up'
+        then baseY + ts
+        else baseY
+
+    speed = ts * 1.5
+    dy = targetY - eY e
+    maxStep = speed * dt
+
+    y'
+      | abs dy <= maxStep = targetY
+      | otherwise         = eY e + signum dy * maxStep
 
 -- | Cheep-cheep: simple underwater fish movement.
 --   Swims horizontally and bounces off walls/solid blocks.
@@ -292,10 +331,16 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
       | not (hit (mBB mario) (eBB e)) = (mario, e:acc, s)
       | otherwise                   = handleCollision mario e acc s
 
-    shouldIgnore e = case eState e of
-      EDead _ -> True
-      _       -> False
+    shouldIgnore e = case (eType e, eState e) of
+      (_, EDead _) -> True
 
+      -- Hidden Piranhas should not hurt Mario.
+      -- If the plant is still visibly retracting, it can still hurt him.
+      (Piranha, EPiranha _ False) ->
+        eY e <= eVY e + 2
+
+      _ -> False
+ 
     handleCollision mario e acc s
       -- Stomp: Mario must be falling (mVY < 0) and above the enemy's centre.
       -- Bowser is immune to stomps — only the axe kills him.
@@ -343,10 +388,11 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
 
     isStationaryShell e = case eState e of EShell _ False -> True; _ -> False
     isDangerous e = case eState e of
-      EAlive          -> True
-      EBowser _ _ _ _ -> True
-      EShell _ True   -> True
-      _               -> False
+      EAlive            -> True
+      EBowser _ _ _ _   -> True
+      EShell _ True     -> True
+      EPiranha _ _      -> eY e > eVY e + 2
+      _                 -> False
 
     -- | Damage Mario by exactly one power level.
     --   Fire → Big → Small → MDead
