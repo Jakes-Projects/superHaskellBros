@@ -84,6 +84,16 @@ mkCheep c r dir =
     EAlive
     CheepCheep
 
+mkGreenCheep :: Int -> Int -> Int -> Enemy
+mkGreenCheep c r dir =
+  Enemy
+    (fromIntegral c * ts)
+    (fromIntegral r * ts)
+    (90 * fromIntegral dir)
+    20
+    EAlive
+    GreenCheep
+
 mkBlooper :: Int -> Int -> Enemy
 mkBlooper c r =
   Enemy
@@ -100,7 +110,7 @@ mkLevel
 mkLevel ts_ es cs ps fs plats sx sy ex w n = Level ts_ es cs ps fs plats sx sy ex w n
 
 initMarioFromLevel :: Level -> Mario
-initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0 0 False False ""
+initMarioFromLevel lvl = Mario (lStartX lvl) (lStartY lvl) 0 0 False Small 1 0 0 0 False False "" 0 False
 
 --------------------------------------------------------------------------------
 -- Enemy helpers
@@ -649,150 +659,126 @@ level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
 --------------------------------------------------------------------------------
 
 level2_2 :: Level
-level2_2 = mkLevel tiles enemies coins [] [] [] (ts*6) (ts*4) (208*ts) 2 2
+level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (183*ts) 2 2
   where
-    -- Main ocean floor.
-    floorTiles = mkGround 0 218
+    -- ── Ocean floor ───────────────────────────────────────────────────────
+    -- Solid ground. No solid ceiling — the wave strip is purely visual;
+    -- physicsMarioWater enforces the ceiling boundary in code.
+    floorTiles = mkGround 0 191
 
-    -- Underwater ceiling. Rows 1-10 stay mostly open for swimming.
-    ceiling =
-         mkRow Step 11 0 218
-      ++ mkRow Brick 10 0 12
-      ++ mkRow Brick 10 205 218
+    -- ── Floor-level raised platforms (pixel-verified mounds) ──────────────
+    floorMound1 = [Tile c r Step | c <- [17..19], r <- [1..4]]
+    floorMound2 = [Tile c r Step | c <- [41..42], r <- [1..4]]
+    floorMound3 = [Tile c r Step | c <- [101..102], r <- [1..4]]
 
-    -- Low pipes only. Pipes are solid, so keep them short.
-    entryPipe = mkPipe 4 2
+    -- ── Tall mid-level pillars ─────────────────────────────────────────────
+    pillar1 = [Tile 155 r Step | r <- [1..7]]
+    pillar2 = [Tile 163 r Step | r <- [1..7]]
 
-    waterPipes =
-         mkPipe 55 2
-      ++ mkPipe 116 2
-      ++ mkPipe 176 2
+    -- ── Ceiling overhangs (stalactites) ───────────────────────────────────
+    ceilHang1 = [Tile c r Step | c <- [77..78], r <- [9..11]]
+    ceilHang2 =  [Tile c 9 Step | c <- [130..138]]
+              ++ [Tile c 10 Step | c <- [130..131]]
+              ++ [Tile 130 11 Step]
 
-    exitPipe = mkPipe 202 2
+    -- ── Right end wall (staircase + solid border) ─────────────────────────
+    rightWall =
+         [Tile c 1 Step | c <- [184..190]]
+      ++ [Tile c 2 Step | c <- [185..190]]
+      ++ [Tile c 3 Step | c <- [186..190]]
+      ++ [Tile c r Step | c <- [187..190], r <- [4,8,9,10,11]]
+      ++ [Tile c r Step | c <- [188..190], r <- [5,6,7]]
+      ++ [Tile c 4 Step | c <- [171..175]]
+      ++ [Tile c 4 Step | c <- [179..182]]
+      ++ [Tile c 8 Step | c <- [171..175]]
+      ++ [Tile c 8 Step | c <- [179..182]]
 
-    -- Low floor rocks. These decorate the floor without blocking the path.
-    floorRocks =
-         [Tile 20 1 Step, Tile 21 1 Step]
-      ++ [Tile 34 1 Step, Tile 35 1 Step]
-
-      -- First raised mound
-      ++ [Tile c 1 Step | c <- [68..73]]
-      ++ [Tile c 2 Step | c <- [71..73]]
-
-      -- Small broken rocks
-      ++ [Tile c 1 Step | c <- [84..88]]
-
-      -- Middle rock mound
-      ++ [Tile c 1 Step | c <- [128..133]]
-      ++ [Tile c 2 Step | c <- [131..133]]
-
-      -- Back-half floor shapes
-      ++ [Tile c 1 Step | c <- [154..159]]
-      ++ [Tile c 2 Step | c <- [158..159]]
-      ++ [Tile c 1 Step | c <- [188..192]]
-
-    -- Short overhead shelves. These add underwater shape without sealing paths.
-    upperRocks =
-         mkRow Step 8 26 31
-      ++ mkRow Step 7 46 50
-      ++ mkRow Step 8 92 96
-      ++ mkRow Step 7 143 149
-      ++ mkRow Step 8 183 188
-
-    -- Seaweed/coral decorations.
-    -- FlagPole is non-solid, so it will not block Mario.
-    seaweed =
+    -- ── Coral decorations (Coral = solid, rendered with coral sprite) ──────
+    -- Columns chosen to be clear of all other solid geometry so coral can
+    -- block Mario without creating impassable walls.
+    -- Each entry: (col, height). Coral fills rows 1..height in that column.
+    coral =
       concat
-        [ [Tile c r FlagPole | r <- [1..h]]
-        | (c,h) <- [ (16,3), (30,4), (48,3), (63,4), (96,3)
-                   , (108,5), (137,4), (152,3), (171,4), (194,3)
-                   ]
+        [ [Tile c r Coral | r <- [1..h]]
+        | (c, h) <- [ (10, 3), (11, 3)   -- short (1 sprite)
+                    , (32, 6), (33, 6)   -- tall  (2 sprites)
+                    , (88, 3), (89, 3)   -- short (1 sprite)
+                    , (119, 6), (120, 6) -- tall  (2 sprites)
+                    , (146, 3), (147, 3) -- short (1 sprite)
+                    ]
         ]
 
-    -- Reachable power-up/coin blocks.
-    -- These are placed in open water so mushrooms/fire flowers can come out cleanly.
-    blocks =
-         mkQPower 4 24 24
-      ++ mkQCoin  4 25 26
-
-      ++ mkQPower 4 82 82
-      ++ mkQCoin  4 83 84
-
-      ++ mkQPower 4 138 138
-      ++ mkQCoin  4 139 140
-
-      ++ mkQPower 4 164 164
-      ++ mkQCoin  4 165 166
-
-    -- Simple underwater end marker.
-    -- Level completion still happens when Mario reaches lEndX.
-    -- This avoids a full above-ground ending for now.
-    endMarker =
-      [Tile 208 r FlagPole | r <- [1..10]]
+    -- ── End marker ────────────────────────────────────────────────────────
+    endMarker = [Tile 183 r FlagPole | r <- [1..10]]
 
     tiles =
          floorTiles
-      ++ ceiling
-      ++ entryPipe
-      ++ waterPipes
-      ++ exitPipe
-      ++ floorRocks
-      ++ upperRocks
-      ++ seaweed
-      ++ blocks
+      ++ floorMound1 ++ floorMound2 ++ floorMound3
+      ++ pillar1 ++ pillar2
+      ++ ceilHang1 ++ ceilHang2
+      ++ rightWall
+      ++ coral
       ++ endMarker
 
-    -- Underwater enemies.
-    -- No Koopas here.
+    -- ── Enemies ───────────────────────────────────────────────────────────
+    -- No pipes, no Piranhas. Mix of red and green Cheep-Cheeps + Bloopers.
     enemies =
-         map mkP [(55,1),(116,1),(176,1),(202,1)]
-
-      -- Cheep-cheeps swimming through the main path.
-      ++ [ mkCheep 34 5 (-1)
-         , mkCheep 62 6 (-1)
-         , mkCheep 90 4 1
-         , mkCheep 124 6 (-1)
-         , mkCheep 150 5 1
-         , mkCheep 184 6 (-1)
+         [ mkCheep     97  9 (-1)
+         , mkCheep    127  2 (-1)
+         , mkCheep    149  7   1
+         , mkCheep    166  1   1
+         , mkCheep    182  8 (-1)
+         , mkCheep    185  5   1
+         ]
+      ++ [ mkGreenCheep  34  5 (-1)
+         , mkGreenCheep  62  6 (-1)
+         , mkGreenCheep  90  4   1
+         , mkGreenCheep 124  6 (-1)
+         , mkGreenCheep 150  5   1
+         ]
+      ++ [ mkBlooper  21  1
+         , mkBlooper  45  2
+         , mkBlooper  54  1
+         , mkBlooper  75  2
+         , mkBlooper  93  7
+         , mkBlooper 100  2
+         , mkBlooper 116  8
+         , mkBlooper 144  2
+         , mkBlooper 163  9
+         , mkBlooper 174  6
          ]
 
-      -- Bloopers placed in open swim spaces.
-      ++ [ mkBlooper 44 6
-         , mkBlooper 104 7
-         , mkBlooper 162 6
-         ]
-
-    -- Coin trails are all in open water.
+    -- ── Coins ─────────────────────────────────────────────────────────────
+    -- Solid tile columns that coins must NOT appear in:
+    --   floorMounds: cols 17-19 rows 1-4, cols 41-42 rows 1-4, cols 101-102 rows 1-4
+    --   pillars:     col 155 rows 1-7, col 163 rows 1-7
+    --   ceilHang1:   cols 77-78 rows 9-11
+    --   ceilHang2:   cols 130-138 row 9, cols 130-131 row 10, col 130 row 11
+    --   rightWall:   cols 171-190 various
+    --   coral:       cols 10-11,32-33,88-89,119-120,146-147 rows 1..h
+    -- All coin positions below have been manually checked against these.
     coins = mkCoins $
-         -- Early reachable coins
-         [(14,3),(15,3),(16,3)]
-      ++ [(22,6),(23,6),(24,6)]
-      ++ [(30,6),(31,6),(32,6)]
-
-      -- First swim trail
-      ++ [(40,4),(41,5),(42,6),(43,6),(44,5),(45,4)]
-
-      -- Around first low pipe/mound
-      ++ [(58,5),(59,5),(60,5)]
-      ++ [(70,5),(71,5),(72,5),(73,5)]
-
-      -- Middle section
-      ++ [(88,3),(89,3),(90,4),(91,4)]
-      ++ [(99,7),(100,7),(101,7)]
-      ++ [(112,5),(113,6),(114,7),(115,7),(116,6),(117,5)]
-
-      -- Around middle rocks
-      ++ [(130,5),(131,5),(132,5)]
-      ++ [(140,3),(141,3),(142,3)]
-
-      -- Back-half clusters
-      ++ [(148,8),(149,8),(150,8)]
-      ++ [(158,6),(159,6),(160,6),(161,6)]
-      ++ [(170,4),(171,4),(172,4)]
-
-      -- Final swim trail
-      ++ [(184,6),(185,6),(186,6)]
-      ++ [(194,4),(195,5),(196,6),(197,6),(198,5),(199,4)]
+         [(13,1),(14,1)]
+      ++ [(26,7),(27,7),(28,7)]
+      ++ [(35,1),(36,1),(37,1)]
+      ++ [(50,5),(51,5),(52,5)]
+      ++ [(66,2),(67,2),(68,2)]
+      ++ [(72,5),(73,5),(74,5),(75,5)]
+      ++ [(80,3),(81,3),(82,3)]
+      ++ [(96,9)]
+      ++ [(100,1),(103,1),(104,1)]
+      ++ [(107,6),(108,6),(109,6)]
+      ++ [(112,6),(113,6),(114,6)]
+      ++ [(121,2),(122,2),(123,2)]
+      ++ [(127,2)]
+      ++ [(132,1),(133,1),(134,1),(135,1)]
+      ++ [(141,2),(142,2),(143,2)]
+      ++ [(149,6)]
+      ++ [(158,3),(159,3),(160,3)]
+      ++ [(163,9)]
+      ++ [(166,1)]
+      ++ [(174,5)]
+      ++ [(182,9)]
 
 --------------------------------------------------------------------------------
 -- World 2-3

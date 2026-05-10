@@ -149,10 +149,15 @@ step dt gs
         else resolvePlatforms newPlats m1
 
     -- Decrement timers
+    swimStroke  = underwater && kJ ks
+    newSwimAnim = if swimStroke then (mSwimAnim m1p + 1) `mod` 5 else mSwimAnim m1p
+
     m2 = m1p { mAnim     = mAnim m1p + dt
               , mInv      = max 0 (mInv m1p - dt)
               , mFireCool = max 0 (mFireCool m1p - dt)
               , mJoeMode  = mJoeMode m1p && mState m1p == Fire
+              , mSwimAnim = newSwimAnim
+              , mSwimming = swimStroke
               }
 
     cam = max (gCam gs) (max (fromIntegral sW / 2) (mX m2))

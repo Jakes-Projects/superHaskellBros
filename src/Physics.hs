@@ -31,6 +31,7 @@ solid Castle      = True
 solid Axe         = False
 solid FirebarTile = False
 solid Step        = True
+solid Coral       = True
 solid _           = False
 
 -- | Sub-stepping physics: number of steps proportional to speed
@@ -153,12 +154,14 @@ physicsMarioWater dt ks sol m0 = foldl (\m _ -> advanceStep m) m0 [1..steps]
 
         y1 = mY m + vy1 * dt'
         yCols = filter (overlapXY nx y1) sol
+        waterCeilY = 400 - halfH
 
         (ny, nvy, grounded)
-          | null yCols = (y1, vy1, False)
-          | vy1 <= 0 =
+          | not (null yCols) && vy1 > 0 =
+              let blocking = minimum (map tBot yCols)
+              in (blocking - halfH, -40, False)
+          | not (null yCols) =
               let blocking = maximum (map tTop yCols)
               in (blocking + halfH, 0, True)
-          | otherwise =
-              let blocking = minimum (map tBot yCols)
-              in (blocking - halfH, -40, False)              
+          | y1 > waterCeilY = (waterCeilY, min 0 vy1, False)
+          | otherwise        = (y1, vy1, False)              

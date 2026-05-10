@@ -44,8 +44,8 @@ data Sprites = Sprites
   , spKoopaShell     :: Picture
   , spKoopaResetting :: Picture
       -- Cheep-cheep
-  , spCheepCheep1 :: Picture
-  , spCheepCheep2 :: Picture
+  , spCheepRed1   :: Picture
+  , spCheepRed2   :: Picture
     -- Blooper
   , spBlooper1    :: Picture
   , spBlooper2    :: Picture
@@ -117,6 +117,34 @@ data Sprites = Sprites
   , spJoeFireball2 :: Picture
   , spJoeFireball3 :: Picture
   , spJoeFireball4 :: Picture
+    -- Underwater-specific sprites
+  , spUwTile      :: Picture   -- underwater_tile.png
+  , spCoral       :: Picture   -- coral.png
+  , spWater       :: Picture   -- water.png (wave strip)
+  , spCoinExposed :: Picture   -- coin_exposed.png
+  , spCheepGreen1 :: Picture   -- cheep_green_1.png
+  , spCheepGreen2 :: Picture   -- cheep_green_2.png
+    -- Swim sprites (cycled through on each stroke, frames 1-5)
+  , spMarioSwim1  :: Picture
+  , spMarioSwim2  :: Picture
+  , spMarioSwim3  :: Picture
+  , spMarioSwim4  :: Picture
+  , spMarioSwim5  :: Picture
+  , spBigSwim1    :: Picture
+  , spBigSwim2    :: Picture
+  , spBigSwim3    :: Picture
+  , spBigSwim4    :: Picture
+  , spBigSwim5    :: Picture
+  , spFireSwim1   :: Picture
+  , spFireSwim2   :: Picture
+  , spFireSwim3   :: Picture
+  , spFireSwim4   :: Picture
+  , spFireSwim5   :: Picture
+  , spJoeSwim1    :: Picture
+  , spJoeSwim2    :: Picture
+  , spJoeSwim3    :: Picture
+  , spJoeSwim4    :: Picture
+  , spJoeSwim5    :: Picture
   }
 
 -- ─── Loader ───────────────────────────────────────────────────────────────────
@@ -166,8 +194,8 @@ loadSprites = Sprites
   <*> loadPNG "assets/koopa_green_shell.png"
   <*> loadPNG "assets/koopa_green_resetting.png"
     -- Cheep-cheep
-  <*> loadPNG "assets/cheep_cheep_1.png"
-  <*> loadPNG "assets/cheep_cheep_2.png"
+  <*> loadPNG "assets/cheep_red_1.png"
+  <*> loadPNG "assets/cheep_red_2.png"
   -- Blooper
   <*> loadPNG "assets/blooper_1.png"
   <*> loadPNG "assets/blooper_2.png"
@@ -239,6 +267,34 @@ loadSprites = Sprites
   <*> loadPNG "assets/fireball_haskell_2.png"
   <*> loadPNG "assets/fireball_haskell_3.png"
   <*> loadPNG "assets/fireball_haskell_4.png"
+  -- Underwater
+  <*> loadPNG "assets/underwater_tile.png"
+  <*> loadPNG "assets/coral.png"
+  <*> loadPNG "assets/water.png"
+  <*> loadPNG "assets/coin_exposed.png"
+  <*> loadPNG "assets/cheep_green_1.png"
+  <*> loadPNG "assets/cheep_green_2.png"
+  -- Swim sprites
+  <*> loadPNG "assets/mario_swim_1.png"
+  <*> loadPNG "assets/mario_swim_2.png"
+  <*> loadPNG "assets/mario_swim_3.png"
+  <*> loadPNG "assets/mario_swim_4.png"
+  <*> loadPNG "assets/mario_swim_5.png"
+  <*> loadPNG "assets/mario_big_swim_1.png"
+  <*> loadPNG "assets/mario_big_swim_2.png"
+  <*> loadPNG "assets/mario_big_swim_3.png"
+  <*> loadPNG "assets/mario_big_swim_4.png"
+  <*> loadPNG "assets/mario_big_swim_5.png"
+  <*> loadPNG "assets/mario_fire_swim_1.png"
+  <*> loadPNG "assets/mario_fire_swim_2.png"
+  <*> loadPNG "assets/mario_fire_swim_3.png"
+  <*> loadPNG "assets/mario_fire_swim_4.png"
+  <*> loadPNG "assets/mario_fire_swim_5.png"
+  <*> loadPNG "assets/joe_fire_swim_1.png"
+  <*> loadPNG "assets/joe_fire_swim_2.png"
+  <*> loadPNG "assets/joe_fire_swim_3.png"
+  <*> loadPNG "assets/joe_fire_swim_4.png"
+  <*> loadPNG "assets/joe_fire_swim_5.png"
 
 -- ─── World Y offset ──────────────────────────────────────────────────────────
 worldYOffset :: Float
@@ -260,20 +316,31 @@ draw :: Sprites -> GS -> IO Picture
 draw spr gs = return $ pictures
   [ drawSkyFor gs
   , translate (-(gCam gs)) worldYOffset world
+  , if underwater then drawWaveStrip spr gs else blank
+  -- Mario is drawn after the wave strip so he appears in front of it.
+  , translate (-(gCam gs)) worldYOffset (drawMario spr (gMario gs))
   , drawHUD gs
   , drawOverlay gs
   ]
   where
-    underwater = isUnderwater gs
+    underwater  = isUnderwater gs
     underground = isUnderground gs || underwater
-    clock = mAnim (gMario gs)
+    clock       = mAnim (gMario gs)
     world = pictures
       [ if underground then blank else drawDecorations spr
-      , drawTilesOfType spr underground clock isGround      anims (gTiles gs)
-      , drawTilesOfType spr underground clock (not.isGround) anims (gTiles gs)
+      -- For underwater: fill the water body with the deep blue colour.
+      -- Centred at world Y 100, height 600 -> spans Y -200 to +400 (wave bottom).
+      -- The skyBlue background shows above Y 400 (the wave strip area). 
+      , if underwater
+          then color waterBlue (translate (gCam gs) (3 * ts + 4)
+                 (rectangleSolid (fromIntegral (220 * (32 :: Int))) (fromIntegral sH)))
+          else blank
+      , drawTilesOfType spr underground underwater clock isGround      anims (gTiles gs)
+      , drawTilesOfType spr underground underwater clock (not.isGround) anims (gTiles gs)
       , drawBrickAnims  spr underground clock anims
+      , if underwater then drawCoralTiles spr (gTiles gs) else blank
       , drawPlatforms spr (gPlatforms gs)
-      , drawCoins   spr clock (gCoins gs)
+      , drawCoins   spr underwater clock (gCoins gs)
       , drawPups    spr clock (gPups  gs)
       , drawFirebars spr clock (gFirebars gs)
       , drawPlayerFireballs spr clock (mJoeMode (gMario gs)) (gFireballs gs)
@@ -281,6 +348,23 @@ draw spr gs = return $ pictures
       , drawMario   spr       (gMario gs)
       ]
     anims = gBrickAnims gs
+
+-- | Tile water.png across the top of the screen in screen space.
+-- The real NES game has a ~2-tile (64px) blue sky strip above the wave.
+-- screenY=200 places the sprite so its top is 64px below the screen top edge.
+drawWaveStrip :: Sprites -> GS -> Picture
+drawWaveStrip spr gs =
+  let sprW    = 144 :: Float
+      screenY = 200 :: Float   -- top of wave = screenY + sprH/2 = 236, gap = 300-236 = 64px
+      nTiles  = ceiling (fromIntegral sW / sprW) + 2 :: Int
+      camOff  = gCam gs `fmod` sprW
+      startX  = -(fromIntegral sW / 2) - camOff
+  in pictures
+       [ translate (startX + fromIntegral i * sprW) screenY (spWater spr)
+       | i <- [0..nTiles]
+       ]
+  where
+    fmod a b = a - fromIntegral (floor (a / b) :: Int) * b
 
 isGround :: Tile -> Bool
 isGround t = tType t == Ground
@@ -315,11 +399,33 @@ pickMarioFrame spr m =
       still     = abs (mVX m) < 5 && mGround m
       crouching = mCrouch m
       joe       = mJoeMode m
-      shooting  = mFireCool m > 0.2   -- show shoot frame for first half of cooldown
+      shooting  = mFireCool m > 0.2
+      swimming  = mSwimming m
+      swimFrame = mSwimAnim m
   in case mState m of
-       Big   -> pickBigFrame   spr airborne still crouching wFrame
-       Fire  -> pickFireFrame  spr joe shooting airborne still crouching wFrame
-       _     -> pickSmallFrame spr airborne still wFrame
+       Big   -> if swimming then pickSwimFrame (bigSwimSprites   spr) swimFrame
+                            else pickBigFrame  spr airborne still crouching wFrame
+       Fire  -> if swimming then pickSwimFrame (if joe then joeSwimSprites spr
+                                                       else fireSwimSprites spr) swimFrame
+                            else pickFireFrame spr joe shooting airborne still crouching wFrame
+       _     -> if swimming then pickSwimFrame (smallSwimSprites spr) swimFrame
+                            else pickSmallFrame spr airborne still wFrame
+
+-- | Select one of 5 swim sprites based on the current stroke frame.
+pickSwimFrame :: [Picture] -> Int -> Picture
+pickSwimFrame sprites frame = sprites !! (frame `mod` 5)
+
+smallSwimSprites :: Sprites -> [Picture]
+smallSwimSprites spr = [spMarioSwim1 spr, spMarioSwim2 spr, spMarioSwim3 spr, spMarioSwim4 spr, spMarioSwim5 spr]
+
+bigSwimSprites :: Sprites -> [Picture]
+bigSwimSprites spr = [spBigSwim1 spr, spBigSwim2 spr, spBigSwim3 spr, spBigSwim4 spr, spBigSwim5 spr]
+
+fireSwimSprites :: Sprites -> [Picture]
+fireSwimSprites spr = [spFireSwim1 spr, spFireSwim2 spr, spFireSwim3 spr, spFireSwim4 spr, spFireSwim5 spr]
+
+joeSwimSprites :: Sprites -> [Picture]
+joeSwimSprites spr = [spJoeSwim1 spr, spJoeSwim2 spr, spJoeSwim3 spr, spJoeSwim4 spr, spJoeSwim5 spr]
 
 pickSmallFrame :: Sprites -> Bool -> Bool -> Int -> Picture
 pickSmallFrame spr airborne still wFrame
@@ -393,7 +499,8 @@ drawEnemyBody spr ug clock e = case eType e of
   Koopa      -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr ug clock e
   Piranha    -> translate 0 (ts * 0.6) drawPiranha
   Bowser     -> drawBowser spr clock e
-  CheepCheep -> scale (marioScale * fishFace e) marioScale $ cheepFrame spr clock
+  CheepCheep -> scale (marioScale * fishFace e) marioScale $ redCheepFrame   spr clock
+  GreenCheep -> scale (marioScale * fishFace e) marioScale $ greenCheepFrame spr clock
   Blooper    -> scale marioScale marioScale $ blooperFrame spr clock
 
 goombaFrame :: Sprites -> Bool -> Float -> Picture
@@ -410,15 +517,21 @@ koopaFrame spr ug clock e = case eState e of
       then if ug then spUgKoopa1 spr else spKoopa1 spr
       else if ug then spUgKoopa2 spr else spKoopa2 spr
 
-cheepFrame :: Sprites -> Float -> Picture
-cheepFrame spr clock =
+redCheepFrame :: Sprites -> Float -> Picture
+redCheepFrame spr clock =
   if even (floor (clock * 8) :: Int)
-    then spCheepCheep1 spr
-    else spCheepCheep2 spr
+    then spCheepRed1 spr
+    else spCheepRed2 spr
+
+greenCheepFrame :: Sprites -> Float -> Picture
+greenCheepFrame spr clock =
+  if even (floor (clock * 8) :: Int)
+    then spCheepGreen1 spr
+    else spCheepGreen2 spr
 
 blooperFrame :: Sprites -> Float -> Picture
 blooperFrame spr clock =
-  if even (floor (clock * 6) :: Int)
+  if even (floor (clock * 2) :: Int)
     then spBlooper1 spr
     else spBlooper2 spr
 
@@ -445,12 +558,11 @@ koopaFace e = if eVX e >= 0 then 1 else -1
 
 drawSkyFor :: GS -> Picture
 drawSkyFor gs
-  | isUnderwater gs = color waterBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
-  | isUnderground gs = color black (rectangleSolid (fromIntegral sW) (fromIntegral sH))
-  | otherwise = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+  | isUnderground gs = color black   (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+  | otherwise        = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
 
 waterBlue :: Color
-waterBlue = makeColorI 30 90 190 255
+waterBlue = makeColorI 66 66 252 255
 
 drawSky :: Picture
 drawSky = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
@@ -545,30 +657,38 @@ drawBush spr (c, isTriple) =
 tileScale :: Float
 tileScale = ts / 48
 
-drawTiles :: Sprites -> Bool -> Float -> [BrickAnim] -> [Tile] -> Picture
-drawTiles spr ug clock anims ts_ =
-  pictures (map (drawTile spr ug clock anims) ts_)
+drawTiles :: Sprites -> Bool -> Bool -> Float -> [BrickAnim] -> [Tile] -> Picture
+drawTiles spr ug uw clock anims ts_ =
+  pictures (map (drawTile spr ug uw clock anims) ts_)
 
-drawTilesOfType :: Sprites -> Bool -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
-drawTilesOfType spr ug clock p anims ts_ =
-  pictures (map (drawTile spr ug clock anims) (filter p ts_))
+drawTilesOfType :: Sprites -> Bool -> Bool -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
+drawTilesOfType spr ug uw clock p anims ts_ =
+  pictures (map (drawTile spr ug uw clock anims) (filter p ts_))
 
-drawTile :: Sprites -> Bool -> Float -> [BrickAnim] -> Tile -> Picture
-drawTile spr ug clock anims t = translate tx (ty + bump) pic
+drawTile :: Sprites -> Bool -> Bool -> Float -> [BrickAnim] -> Tile -> Picture
+drawTile spr ug uw clock anims t = translate tx (ty + bump) pic
   where
     tx   = fromIntegral (tCol t) * ts + ts/2
     ty   = fromIntegral (tRow t) * ts + ts/2
     bump = bumpOffset anims t
-    ground spr_ = scale tileScale tileScale (if ug then spUgBlockGround spr_ else spBlockGround spr_)
-    brick  spr_ = scale tileScale tileScale (if ug then spUgBlockBrick  spr_ else spBlockBrick  spr_)
-    step   spr_ = scale tileScale tileScale (if ug then spUgBlockStep   spr_ else spBlockStep   spr_)
-    empty  spr_ = scale tileScale tileScale (if ug then spUgBlockHitEmpty spr_ else spBlockHitEmpty spr_)
-    pic  = case tType t of
-      Ground     -> ground spr
-      Brick      -> brick  spr
+    groundPic = if uw      then scale tileScale tileScale (spUwTile spr)
+                else if ug then scale tileScale tileScale (spUgBlockGround spr)
+                else            scale tileScale tileScale (spBlockGround spr)
+    brickPic  = if ug then scale tileScale tileScale (spUgBlockBrick spr)
+                else       scale tileScale tileScale (spBlockBrick spr)
+    stepPic   = if uw      then scale tileScale tileScale (spUwTile spr)
+                else if ug then scale tileScale tileScale (spUgBlockStep spr)
+                else            scale tileScale tileScale (spBlockStep spr)
+    emptyPic  = if ug then scale tileScale tileScale (spUgBlockHitEmpty spr)
+                else       scale tileScale tileScale (spBlockHitEmpty spr)
+    pic = case tType t of
+      Ground     -> groundPic
+      Brick      -> brickPic
       QBlock _   -> scale tileScale tileScale (qBlockFrame spr clock)
-      Used       -> empty  spr
-      Step       -> step   spr
+      Used       -> emptyPic
+      Step       -> stepPic
+      -- Coral tiles: rendered separately by drawCoralTiles, hidden here
+      Coral      -> blank
       PipeTop    ->
         let h       = fromIntegral (tRow t) :: Float
             scaleX  = 2 * ts / 48
@@ -580,10 +700,36 @@ drawTile spr ug clock anims t = translate tx (ty + bump) pic
       FlagPole   -> drawFlagPole
       FlagBase   -> drawFlagBase
       Castle     -> drawCastle t
-      SlopeLeft  -> ground spr
-      SlopeRight -> ground spr
+      SlopeLeft  -> groundPic
+      SlopeRight -> groundPic
       Axe        -> drawAxe
       _          -> blank
+
+-- | Draw coral tiles (Coral TType) using the coral sprite.
+-- Rendered as a separate pass so they can be layered correctly in the world.
+drawCoralTiles :: Sprites -> [Tile] -> Picture
+drawCoralTiles spr ts_ =
+  -- coral.png is 48x140, rendered at tileScale = 32x93px per sprite.
+  -- Short columns (<=3 tiles): 1 sprite. Tall columns (>3 tiles): 2 stacked sprites.
+  -- Physics tiles cover the full rendered height in both cases.
+  pictures
+    [ pictures
+        [ translate centreX (baseY + rendH / 2 + fromIntegral i * rendH)
+                   (scale tileScale tileScale (spCoral spr))
+        | i <- [0 .. nSprites - 1]
+        ]
+    | col <- coralColumns, not (null col)
+    , let maxRow   = maximum (map tRow col)
+          centreX  = fromIntegral (tCol (head col)) * ts + ts / 2
+          baseY    = ts                  -- ground surface
+          rendH    = 140 * tileScale     -- 93.3px per sprite
+          nSprites = if maxRow <= 3 then 1 else 2
+    ]
+  where
+    coralTiles   = [ t | t <- ts_, tType t == Coral ]
+    uniqueCols   = foldr (\c acc -> if c `elem` acc then acc else c:acc) []
+                         (map tCol coralTiles)
+    coralColumns = [ filter (\t -> tCol t == c) coralTiles | c <- uniqueCols ]
 
 -- | Look up bump offset for a tile (0 if no active BumpAnim for it).
 bumpOffset :: [BrickAnim] -> Tile -> Float
@@ -784,11 +930,13 @@ drawPlatform spr mp =
   in translate cx cy (spPlatform spr)
 
 -- ─── Coins ───────────────────────────────────────────────────────────────────
-drawCoins spr clock = pictures . map (drawCoin spr clock)
+drawCoins :: Sprites -> Bool -> Float -> [(Float,Float,Bool)] -> Picture
+drawCoins spr uw clock = pictures . map (drawCoin spr uw clock)
 
-drawCoin :: Sprites -> Float -> (Float,Float,Bool) -> Picture
-drawCoin _   _     (_,_,True) = blank
-drawCoin spr clock (x,y,_)   = translate x y (coinFrame spr clock)
+drawCoin :: Sprites -> Bool -> Float -> (Float,Float,Bool) -> Picture
+drawCoin _   _  _     (_,_,True) = blank
+drawCoin spr uw clock (x,y,_)   =
+  translate x y $ if uw then spCoinExposed spr else coinFrame spr clock
 
 coinFrame :: Sprites -> Float -> Picture
 coinFrame spr clock =

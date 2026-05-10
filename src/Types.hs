@@ -6,12 +6,12 @@ data QContent = QCoin | QPowerUp deriving (Eq, Show)
 
 data TType = Ground | Brick | QBlock QContent | Used
            | Pipe | PipeTop | PipeR | FlagPole | FlagBase | Castle
-           | SlopeLeft | SlopeRight | Axe | FirebarTile | Step
+           | SlopeLeft | SlopeRight | Axe | FirebarTile | Step | Coral
            deriving (Eq, Show)
 
 data Tile = Tile { tCol :: Int, tRow :: Int, tType :: TType } deriving Show
 
-data EType = Goomba | Koopa | Piranha | Bowser | CheepCheep | Blooper
+data EType = Goomba | Koopa | Piranha | Bowser | CheepCheep | GreenCheep | Blooper
   deriving (Eq, Show)
 
 data EnemyState
@@ -50,6 +50,8 @@ data Mario = Mario
   , mCrouch     :: Bool    -- crouching (Big/Fire only, grounded, down held)
   , mJoeMode    :: Bool    -- True when "joe" skin is active (Fire only)
   , mJoeBuffer  :: String  -- tracks recent keypresses for "joe" detection
+  , mSwimAnim   :: Int     -- swim animation frame (0-4), advances each stroke
+  , mSwimming   :: Bool    -- True when swim button is held
   } deriving Show
 
 -- | A fireball shot by Fire Mario.

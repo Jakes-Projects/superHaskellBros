@@ -8,6 +8,7 @@ stepEnemy :: Float -> [Tile] -> Mario -> Enemy -> Enemy
 stepEnemy dt sol mario e = case eState e of
   EAlive
     | eType e == CheepCheep -> stepCheepCheep dt sol mario e
+    | eType e == GreenCheep -> stepCheepCheep dt sol mario e
     | eType e == Blooper    -> stepBlooper dt sol mario e
     | otherwise             -> stepAlive dt sol mario e
 
@@ -98,13 +99,13 @@ stepBlooper dt sol mario e = e { eX = x', eY = y', eVX = vx', eVY = vy' }
     dirY :: Float
     dirY = if mY mario > eY e then 1 else -1
 
-    pulse = sin (mAnim mario * 5 + eX e / 50)
+    pulse = sin (mAnim mario * 2.5 + eX e / 50)
 
-    desiredVX = 45 * dirX
-    desiredVY = 65 * dirY + 30 * pulse
+    desiredVX = 28 * dirX
+    desiredVY = 40 * dirY + 18 * pulse
 
-    vx0 = eVX e * 0.92 + desiredVX * 0.08
-    vy0 = eVY e * 0.88 + desiredVY * 0.12
+    vx0 = eVX e * 0.94 + desiredVX * 0.06
+    vy0 = eVY e * 0.92 + desiredVY * 0.08
 
     x0 = eX e + vx0 * dt
     y0 = eY e + vy0 * dt
@@ -272,6 +273,7 @@ collideEnemies m es sc jumpHeld = foldr go (m, [], sc) es
               _ -> (mario, e:acc, s)
             Piranha    -> hurtMario mario e acc s
             CheepCheep -> hurtMario mario e acc s
+            GreenCheep -> hurtMario mario e acc s
             Blooper    -> hurtMario mario e acc s
 
       -- Kick stationary shell: Mario must be moving toward it (not just touching)
