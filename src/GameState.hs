@@ -196,11 +196,39 @@ step dt gs
 
     m5 = if didShoot then m4 { mFireCool = 0.4 } else m4
 
-    fb2 = map (stepFireball dt sol) fb1
+    -- Bowser fires when his ft timer hits 0; spawn a straight fireball toward Mario
+    bowserFireballs =
+      [ Fireball
+          { fiX      = eX e + (if mX m5 < eX e then 0 else ts * 2)
+          , fiY      = eY e + ts
+          , fiVX     = if mX m5 < eX e then -200 else 200
+          , fiVY     = 0
+          , fiAlive  = True
+          , fiBowser = True
+          }
+      | e <- es3
+      , eType e == Bowser
+      , case eState e of { EBowser 0 _ _ _ -> True; _ -> False }
+      ]
 
-    (fb3, es4, sc5) = fireballsVsEnemies fb2 es3 sc4
+    -- Reset Bowser's fire timer after spawning so he doesn't fire every frame
+    es3' = map resetBowserTimer es3
+    resetBowserTimer e
+      | eType e == Bowser
+      , EBowser 0 jt it hp <- eState e
+      = e { eState = EBowser 3.0 jt it hp }
+      | otherwise = e
+
+    fb2 = map (stepFireball dt sol) (fb1 ++ bowserFireballs)
+
+    (fb3, es4, sc5) = fireballsVsEnemies fb2 es3' sc4
 
     fb4 = filter fiAlive fb3
+
+    -- Bowser fireballs hurt Mario (downgrade state, not instant death)
+    bowserFbBB fb = (fiX fb, fiY fb, 12, 12)
+    touchesBowserFire = mInv m5 <= 0
+      && any (\fb -> fiBowser fb && fiAlive fb && hit (mBB m5) (bowserFbBB fb)) fb4
 
     -- ── Firebar collision ────────────────────────────────────────────────
     firebarSegBBs =
@@ -219,10 +247,13 @@ step dt gs
         && any (hit (mBB m5)) firebarSegBBs
 
     m5'
-      | not touchesFirebar = m5
-      | mState m5 == Fire  = m5 { mState = Big,   mInv = 2.0 }
-      | mState m5 == Big   = m5 { mState = Small, mInv = 2.0 }
-      | otherwise          = m5 { mState = MDead, mVY = 500, mVX = 0 }
+      | touchesFirebar || touchesBowserFire
+      , mState m5 == Fire  = m5 { mState = Big,   mInv = 2.0 }
+      | touchesFirebar || touchesBowserFire
+      , mState m5 == Big   = m5 { mState = Small, mInv = 2.0 }
+      | touchesFirebar || touchesBowserFire
+      = m5 { mState = MDead, mVY = 500, mVX = 0 }
+      | otherwise          = m5
 
     -- ── Lava / timer death ───────────────────────────────────────────────
     onLava = any (\t -> tRow t == (-2) && hit (mBB m5') (tBB t)) (gTiles gs)

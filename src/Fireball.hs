@@ -56,7 +56,24 @@ spawnFireball m fbs
 stepFireball :: Float -> [Tile] -> Fireball -> Fireball
 stepFireball dt sol fb
   | not (fiAlive fb) = fb
-  | otherwise        = fb { fiX = x', fiY = y', fiVY = vy', fiAlive = alive' }
+  | fiBowser fb      = stepBowserFireball dt sol fb
+  | otherwise        = stepMarioFireball dt sol fb
+
+-- | Bowser fireballs travel straight horizontally, no gravity, no bounce.
+--   Destroyed only by hitting a wall or going off-screen.
+stepBowserFireball :: Float -> [Tile] -> Fireball -> Fireball
+stepBowserFireball dt sol fb = fb { fiX = x', fiAlive = alive' }
+  where
+    solidTiles = filter (solid . tType) sol
+    x1       = fiX fb + fiVX fb * dt
+    wallHit  = any (hit (x1, fiY fb, fireballHalf*2, fireballHalf*2) . tBB) solidTiles
+    offScreen = fiX fb < -200 || fiX fb > 10000
+    x'       = if wallHit then fiX fb else x1
+    alive'   = not wallHit && not offScreen
+
+-- | Mario fireballs bounce off the ground and are destroyed by walls.
+stepMarioFireball :: Float -> [Tile] -> Fireball -> Fireball
+stepMarioFireball dt sol fb = fb { fiX = x', fiY = y', fiVY = vy', fiAlive = alive' }
   where
     solidTiles = filter (solid . tType) sol
 

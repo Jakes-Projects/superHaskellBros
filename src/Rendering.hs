@@ -105,6 +105,16 @@ data Sprites = Sprites
   , spUgKoopa2           :: Picture
   , spUgKoopaShell       :: Picture
   , spUgKoopaResetting   :: Picture
+    -- Castle level sprites
+  , spCastleBrick  :: Picture   -- castle_bricks.png  48x48
+  , spCastleAxe    :: Picture   -- castle_axe.png     36x40
+  , spCastleBridge :: Picture   -- castle_bridge.png  624x64
+  , spLava         :: Picture   -- lava.png           144x72
+    -- Piranha Plant (overworld + underground)
+  , spPiranha1     :: Picture
+  , spPiranha2     :: Picture
+  , spUgPiranha1   :: Picture
+  , spUgPiranha2   :: Picture
     -- Joe Fire Mario sprites (activated by typing "joe" as Fire Mario)
   , spJoeStand    :: Picture
   , spJoeRun1     :: Picture
@@ -255,6 +265,16 @@ loadSprites = Sprites
   <*> loadPNG "assets/koopa_green_2_ug.png"
   <*> loadPNG "assets/koopa_green_shell_ug.png"
   <*> loadPNG "assets/koopa_green_resetting_ug.png"
+  -- Castle level sprites
+  <*> loadPNG "assets/castle_bricks.png"
+  <*> loadPNG "assets/castle_axe.png"
+  <*> loadPNG "assets/castle_bridge.png"
+  <*> loadPNG "assets/lava.png"
+  -- Piranha Plant
+  <*> loadPNG "assets/piranha_plant_1.png"
+  <*> loadPNG "assets/piranha_plant_2.png"
+  <*> loadPNG "assets/piranha_plant_1_ug.png"
+  <*> loadPNG "assets/piranha_plant_2_ug.png"
   -- Joe Fire Mario
   <*> loadPNG "assets/joe_fire_stand.png"
   <*> loadPNG "assets/joe_fire_run_1.png"
@@ -310,7 +330,12 @@ isUnderwater gs =
 isUnderground :: GS -> Bool
 isUnderground gs =
   let lvl = gLevels gs !! gLevelIdx gs
-  in not (isUnderwater gs) && (lNumber lvl == 2 || lNumber lvl == 4)
+  in not (isUnderwater gs) && lNumber lvl == 2
+
+isCastle :: GS -> Bool
+isCastle gs =
+  let lvl = gLevels gs !! gLevelIdx gs
+  in lNumber lvl == 4
 
 draw :: Sprites -> GS -> IO Picture
 draw spr gs = return $ pictures
@@ -325,26 +350,30 @@ draw spr gs = return $ pictures
   where
     underwater  = isUnderwater gs
     underground = isUnderground gs || underwater
+    castle      = isCastle gs
     clock       = mAnim (gMario gs)
     world = pictures
-      [ if underground then blank else drawDecorations spr
-      -- For underwater: fill the water body with the deep blue colour.
-      -- Centred at world Y 100, height 600 -> spans Y -200 to +400 (wave bottom).
-      -- The skyBlue background shows above Y 400 (the wave strip area). 
+      [ if underground || castle then blank else drawDecorations spr
       , if underwater
           then color waterBlue (translate (gCam gs) (3 * ts + 4)
                  (rectangleSolid (fromIntegral (220 * (32 :: Int))) (fromIntegral sH)))
           else blank
-      , drawTilesOfType spr underground underwater clock isGround      anims (gTiles gs)
-      , drawTilesOfType spr underground underwater clock (not.isGround) anims (gTiles gs)
+      -- Lava drawn first so floor tiles render on top (prevents clipping)
+      , if castle then drawLava spr (gTiles gs) else blank
+      -- Piranhas behind all tiles
+      , drawEnem    spr underground clock (filter isPiranha (gEnem gs))
+      , drawTilesOfType spr underground underwater castle clock isGround      anims (gTiles gs)
+      , drawTilesOfType spr underground underwater castle clock (not.isGround) anims (gTiles gs)
       , drawBrickAnims  spr underground clock anims
       , if underwater then drawCoralTiles spr (gTiles gs) else blank
+      -- Bridge rendered over floor tiles at Bowser's pit
+      , if castle then drawCastleBridge spr (gTiles gs) else blank
       , drawPlatforms spr (gPlatforms gs)
       , drawCoins   spr underwater clock (gCoins gs)
       , drawPups    spr clock (gPups  gs)
       , drawFirebars spr clock (gFirebars gs)
       , drawPlayerFireballs spr clock (mJoeMode (gMario gs)) (gFireballs gs)
-      , drawEnem    spr underground clock (gEnem  gs)
+      , drawEnem    spr underground clock (filter (not . isPiranha) (gEnem gs))
       , drawMario   spr       (gMario gs)
       ]
     anims = gBrickAnims gs
@@ -467,40 +496,42 @@ pickJoeFrame spr shooting airborne still crouching wFrame
 
 -- ─── Enemies ──────────────────────────────────────────────────────────────────
 
+isPiranha :: Enemy -> Bool
+isPiranha e = eType e == Piranha
+
 drawEnem :: Sprites -> Bool -> Float -> [Enemy] -> Picture
 drawEnem spr ug clock = pictures . map (drawE spr ug clock)
 
 drawE :: Sprites -> Bool -> Float -> Enemy -> Picture
 drawE spr ug clock e = case eState e of
-  EDead _         -> translate cx (eY e + 5)          (if ug then spUgGoombaCrushed spr else spGoombaCrushed spr)
+  EDead _             -> translate cx (eY e + 5) (if ug then spUgGoombaCrushed spr else spGoombaCrushed spr)
   EShell timer moving -> translate cx (eY e + spriteHalf) (shellPic timer moving)
-  EBowser _ _ _ _ -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
+  EBowser _ _ _ _     -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
   _               ->
     if shouldDrawAlive e
-      then translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
+      then case eType e of
+        Piranha -> translate cx (eY e + 36) (drawEnemyBody spr ug clock e)
+        _       -> translate cx (eY e + spriteHalf) (drawEnemyBody spr ug clock e)
       else blank
   where
     cx = eX e + ts/2
     spriteHalf = 24
 
     shellPic timer moving
-      | moving           = if ug then spUgKoopaShell spr     else spKoopaShell spr
-      | timer <= 2.0     = if ug then spUgKoopaResetting spr else spKoopaResetting spr
-      | otherwise        = if ug then spUgKoopaShell spr     else spKoopaShell spr
+      | moving       = if ug then spUgKoopaShell spr     else spKoopaShell spr
+      | timer <= 2.0 = if ug then spUgKoopaResetting spr else spKoopaResetting spr
+      | otherwise    = if ug then spUgKoopaShell spr     else spKoopaShell spr
 
     shouldDrawAlive en = case eState en of
-      EAlive -> True
-
-      EPiranha _ up ->
-        up || eY en > eVY en + 2
-
-      _ -> False
+      EAlive        -> True
+      EPiranha _ up -> up || eY en > eVY en - ts
+      _             -> False
 
 drawEnemyBody :: Sprites -> Bool -> Float -> Enemy -> Picture
 drawEnemyBody spr ug clock e = case eType e of
   Goomba     -> scale marioScale marioScale $ goombaFrame spr ug clock
   Koopa      -> scale (marioScale * koopaFace e) marioScale $ koopaFrame spr ug clock e
-  Piranha    -> translate 0 (ts * 0.6) drawPiranha
+  Piranha    -> drawPiranha spr ug clock
   Bowser     -> drawBowser spr clock e
   CheepCheep -> scale (marioScale * fishFace e) marioScale $ redCheepFrame   spr clock
   GreenCheep -> scale (marioScale * fishFace e) marioScale $ greenCheepFrame spr clock
@@ -541,32 +572,15 @@ blooperFrame spr clock =
 fishFace :: Enemy -> Float
 fishFace e = if eVX e >= 0 then 1 else -1
 
--- Bowser cycles through walk frames and uses fire frames near the end of
--- his fire timer. This gives him a more original-style boss feel even before
--- adding actual Bowser fire projectiles.
 drawBowser :: Sprites -> Float -> Enemy -> Picture
 drawBowser spr clock e =
   let frame = (floor (clock * 4) :: Int) `mod` 4
-
-      walkPic = case frame of
+      pic = case frame of
         0 -> spBowser1 spr
         1 -> spBowser2 spr
         2 -> spBowser3 spr
         _ -> spBowser4 spr
-
-      firePic =
-        if even (floor (clock * 8) :: Int)
-          then spBowserFire1 spr
-          else spBowserFire2 spr
-
-      firePose = case eState e of
-        EBowser f _ _ _ -> f <= 0.45
-        _               -> False
-
-      pic = if firePose then firePic else walkPic
-
       facing = if eVX e > 0 then -1 else 1 :: Float
-
   in scale (marioScale * facing) marioScale pic
 
 koopaFace :: Enemy -> Float
@@ -576,7 +590,8 @@ koopaFace e = if eVX e >= 0 then 1 else -1
 
 drawSkyFor :: GS -> Picture
 drawSkyFor gs
-  | isUnderground gs = color black   (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+  | isUnderground gs = color black (rectangleSolid (fromIntegral sW) (fromIntegral sH))
+  | isCastle gs      = color black (rectangleSolid (fromIntegral sW) (fromIntegral sH))
   | otherwise        = color skyBlue (rectangleSolid (fromIntegral sW) (fromIntegral sH))
 
 waterBlue :: Color
@@ -675,53 +690,57 @@ drawBush spr (c, isTriple) =
 tileScale :: Float
 tileScale = ts / 48
 
-drawTiles :: Sprites -> Bool -> Bool -> Float -> [BrickAnim] -> [Tile] -> Picture
-drawTiles spr ug uw clock anims ts_ =
-  pictures (map (drawTile spr ug uw clock anims) ts_)
+drawTiles :: Sprites -> Bool -> Bool -> Bool -> Float -> [BrickAnim] -> [Tile] -> Picture
+drawTiles spr ug uw castle clock anims ts_ =
+  pictures (map (drawTile spr ug uw castle clock anims) ts_)
 
-drawTilesOfType :: Sprites -> Bool -> Bool -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
-drawTilesOfType spr ug uw clock p anims ts_ =
-  pictures (map (drawTile spr ug uw clock anims) (filter p ts_))
+drawTilesOfType :: Sprites -> Bool -> Bool -> Bool -> Float -> (Tile -> Bool) -> [BrickAnim] -> [Tile] -> Picture
+drawTilesOfType spr ug uw castle clock p anims ts_ =
+  pictures (map (drawTile spr ug uw castle clock anims) (filter p ts_))
 
-drawTile :: Sprites -> Bool -> Bool -> Float -> [BrickAnim] -> Tile -> Picture
-drawTile spr ug uw clock anims t = translate tx (ty + bump) pic
+drawTile :: Sprites -> Bool -> Bool -> Bool -> Float -> [BrickAnim] -> Tile -> Picture
+drawTile spr ug uw castle clock anims t = translate tx (ty + bump) pic
   where
     tx   = fromIntegral (tCol t) * ts + ts/2
     ty   = fromIntegral (tRow t) * ts + ts/2
     bump = bumpOffset anims t
-    groundPic = if uw      then scale tileScale tileScale (spUwTile spr)
-                else if ug then scale tileScale tileScale (spUgBlockGround spr)
-                else            scale tileScale tileScale (spBlockGround spr)
-    brickPic  = if ug then scale tileScale tileScale (spUgBlockBrick spr)
-                else       scale tileScale tileScale (spBlockBrick spr)
-    stepPic   = if uw      then scale tileScale tileScale (spUwTile spr)
-                else if ug then scale tileScale tileScale (spUgBlockStep spr)
-                else            scale tileScale tileScale (spBlockStep spr)
+    castlePic = scale tileScale tileScale (spCastleBrick spr)
+    groundPic = if castle    then castlePic
+                else if uw   then scale tileScale tileScale (spUwTile spr)
+                else if ug   then scale tileScale tileScale (spUgBlockGround spr)
+                else              scale tileScale tileScale (spBlockGround spr)
+    brickPic  = if castle    then castlePic
+                else if ug   then scale tileScale tileScale (spUgBlockBrick spr)
+                else              scale tileScale tileScale (spBlockBrick spr)
+    stepPic   = if castle    then castlePic
+                else if uw   then scale tileScale tileScale (spUwTile spr)
+                else if ug   then scale tileScale tileScale (spUgBlockStep spr)
+                else              scale tileScale tileScale (spBlockStep spr)
     emptyPic  = if ug then scale tileScale tileScale (spUgBlockHitEmpty spr)
                 else       scale tileScale tileScale (spBlockHitEmpty spr)
     pic = case tType t of
-      Ground     -> groundPic
-      Brick      -> brickPic
-      QBlock _   -> scale tileScale tileScale (qBlockFrame spr clock)
-      Used       -> emptyPic
-      Step       -> stepPic
-      -- Coral tiles: rendered separately by drawCoralTiles, hidden here
-      Coral      -> blank
-      PipeTop    ->
+      Ground      -> groundPic
+      Brick       -> brickPic
+      QBlock _    -> scale tileScale tileScale (qBlockFrame spr clock)
+      Used        -> emptyPic
+      Step        -> stepPic
+      -- FirebarTile: single used-? block (pivot only). Castle brick in castle mode.
+      FirebarTile -> emptyPic
+      Coral       -> blank
+      PipeTop     ->
         let h       = fromIntegral (tRow t) :: Float
             scaleX  = 2 * ts / 48
             scaleY  = h * ts / 96
             offsetY = ts * (1 - h) / 2
         in translate (ts/2) offsetY $ scale scaleX scaleY (spPipe spr)
-      Pipe       -> blank
-      PipeR      -> blank
-      FlagPole   -> drawFlagPole
-      FlagBase   -> drawFlagBase
-      Castle     -> drawCastle t
-      SlopeLeft  -> groundPic
-      SlopeRight -> groundPic
-      Axe        -> drawAxe
-      _          -> blank
+      Pipe        -> blank
+      PipeR       -> blank
+      FlagPole    -> drawFlagPole
+      FlagBase    -> drawFlagBase
+      Castle      -> drawCastle t
+      SlopeLeft   -> groundPic
+      SlopeRight  -> groundPic
+      Axe         -> if castle then scale (36/48) (40/48) (spCastleAxe spr) else drawAxe
 
 -- | Draw coral tiles (Coral TType) using the coral sprite.
 -- Rendered as a separate pass so they can be layered correctly in the world.
@@ -835,21 +854,57 @@ drawCastle t =
            else blank
        ]
 
-drawPiranha :: Picture
-drawPiranha = pictures
-  [ color (makeColorI 0 180 0 255)   (circleSolid (ts*0.45))
-  , color (makeColorI 220 50 50 255) (translate 0 (ts*0.2) (circleSolid (ts*0.2)))
-  , color white (translate (-6) 6 (circleSolid 4))
-  , color white (translate  (6) 6 (circleSolid 4))
-  , color black (translate (-6) 6 (circleSolid 2))
-  , color black (translate  (6) 6 (circleSolid 2))
-  , color (makeColorI 0 150 0 255)
-      (translate 0 (-ts*0.3) (rectangleSolid (ts*0.25) (ts*0.5)))
-  , color (makeColorI 0 200 0 255)
-      (translate (-ts*0.3) (-ts*0.1) (scale (ts*0.2) (ts*0.15) (circleSolid 1)))
-  , color (makeColorI 0 200 0 255)
-      (translate (ts*0.3) (-ts*0.1) (scale (ts*0.2) (ts*0.15) (circleSolid 1)))
-  ]
+drawPiranha :: Sprites -> Bool -> Float -> Picture
+drawPiranha spr ug clock =
+  if even (floor (clock * 6) :: Int)
+    then if ug then spUgPiranha1 spr else spPiranha1 spr
+    else if ug then spUgPiranha2 spr else spPiranha2 spr
+
+-- | Draw lava.png (144x72) tiled across each lava pit at natural size.
+--   Pits are identified by Ground tiles at row -2.
+--   Rendered BEFORE floor tiles so castle bricks overlap the edges.
+drawLava :: Sprites -> [Tile] -> Picture
+drawLava spr tiles = pictures (concatMap drawPit pits)
+  where
+    sprW  = 144 :: Float
+    -- Pits span game rows 1-2 (height 64px). Center of gap = Y 64.
+    -- Lava sprite is 144x72, so it slightly overflows vertically — looks natural.
+    lavaY = 2 * ts   -- = 64, center of the 2-row pit gap
+
+    lavaCols = [ tCol t | t <- tiles, tType t == Ground, tRow t == (-2) ]
+
+    pits = groupRuns (foldr insert [] (reverse lavaCols))
+      where
+        insert c []     = [[c]]
+        insert c (g:gs) = if c == last g + 1 then (g ++ [c]) : gs else g : [c] : gs
+        groupRuns = id
+
+    drawPit colGroup =
+      let c1    = minimum colGroup
+          c2    = maximum colGroup
+          x1    = fromIntegral c1 * ts
+          x2    = fromIntegral (c2 + 1) * ts
+          pitW  = x2 - x1
+          n     = ceiling (pitW / sprW) :: Int
+          startX = x1 + sprW / 2
+      in [ translate (startX + fromIntegral i * sprW) lavaY (spLava spr)
+         | i <- [0 .. n - 1] ]
+
+-- | Draw castle_bridge.png (624x64) over the Bowser pit (cols 128-140).
+--   The bridge sits at game row 5 top (Y = 5*32+32 = 192).
+--   Sprite is 624x64; center Y = 192 - 32 = 160 (just below floor top).
+drawCastleBridge :: Sprites -> [Tile] -> Picture
+drawCastleBridge spr tiles =
+  let bridgeCols = [ tCol t | t <- tiles, tType t == Ground, tRow t == (-2)
+                             , tCol t >= 128, tCol t <= 140 ]
+  in if null bridgeCols then blank
+     else let c1    = minimum bridgeCols
+              c2    = maximum bridgeCols
+              midX  = fromIntegral (c1 + c2 + 1) * ts / 2
+              -- Bridge top flush with floor top = game row 5 top = 192
+              -- Sprite 64px tall, center = 192 - 32 = 160
+              bridgeY = 5 * ts + ts - 32
+          in translate midX bridgeY (spCastleBridge spr)
 
 drawFirebars :: Sprites -> Float -> [Firebar] -> Picture
 drawFirebars spr clock = pictures . map (drawFirebar spr clock)

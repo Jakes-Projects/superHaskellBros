@@ -161,66 +161,57 @@ stepBlooper dt sol mario e = e { eX = x', eY = y', eVX = vx', eVY = vy' }
     vx' = if hitX then -vx0 else vx0
     vy' = if hitY then -vy0 else vy0
 
--- | Bowser behaves closer to the original:
---   • faces Mario
---   • paces on the bridge instead of hard-chasing
---   • reverses at walls/edges
---   • jumps periodically
---   • stores hit points in EBowser state
+-- | Bowser behavior:
+--   * Stands idle until Mario gets within ~8 tiles
+--   * Always walks toward Mario once triggered
+--   * Jumps frequently on a timer
+--   * Fire timer counts down to 0 as a signal for GameState to spawn a fireball
+--   * Hit points stored in EBowser state; defeated by 5 fireballs or the axe
 stepBowser :: Float -> [Tile] -> Mario -> Enemy -> Enemy
 stepBowser dt sol mario e =
-  e { eX = ex'
-    , eVX = vx'
-    , eY = ey'
-    , eVY = vy'
+  e { eX    = ex'
+    , eVX   = vx'
+    , eY    = ey'
+    , eVY   = vy'
     , eState = newState
     }
   where
     (ft, jt, it, hp) = case eState e of
-      EBowser f j i hp -> (f, j, i, hp)
-      _               -> (2.5, 3.4, 1.0, 5)
+      EBowser f j i h -> (f, j, i, h)
+      _               -> (3.0, 2.5, 1.0, 5)
 
-    ft' = if ft - dt <= 0 then 2.5 else ft - dt
-    jt' = if jt - dt <= 0 then 3.4 else jt - dt
-    it' = max 0 (it - dt)
+    -- Proximity trigger: once Mario is within 8 tiles, Bowser activates forever.
+    marioClose = abs (mX mario - eX e) < ts * 8
+    it' | it > 0 && marioClose = 0
+        | it > 0               = it
+        | otherwise            = 0
+
+    idle = it' > 0
+
+    -- Fire timer: counts down to 0 as spawn signal; GameState resets it to 3.0
+    ft' | idle         = ft
+        | ft - dt <= 0 = 0
+        | otherwise    = ft - dt
+
+    -- Jump timer: auto-resets every 2.5s for frequent hops
+    jt' | idle         = jt
+        | jt - dt <= 0 = 2.5
+        | otherwise    = jt - dt
 
     newState = EBowser ft' jt' it' hp
 
-    idle = it > 0
+    -- Always walk toward Mario
+    dir :: Float
+    dir = if mX mario < eX e then -1 else 1
 
-    -- Bowser faces Mario, but he does not fully chase him.
-    marioDir = if mX mario < eX e then -1 else 1 :: Float
+    vx' | idle      = 0
+        | otherwise = 90 * dir
 
-    -- If Bowser somehow has no velocity, restart his pacing.
-    baseVX
-      | idle             = 0
-      | abs (eVX e) < 1  = -55
-      | otherwise        = eVX e
+    ex0     = eX e + vx' * dt
+    wallHit = any (hit (ex0 + ts, eY e + ts, ts * 1.5, ts * 1.5) . tBB) sol
+    ex'     = if wallHit then eX e else ex0
 
-    ex0 = eX e + baseVX * dt
-
-    -- Wall check with Bowser-sized box.
-    wallX =
-      any
-        (hit (ex0 + ts, eY e + ts, ts * 1.5, ts * 1.5) . tBB)
-        sol
-
-    -- Edge check so Bowser turns around instead of walking off the bridge.
-    dir = if baseVX >= 0 then 1 else -1 :: Float
-    aheadX = ex0 + if dir > 0 then ts * 2 else 0
-    edgeProbe = (aheadX, eY e - ts * 0.25, ts * 0.8, ts * 0.6)
-    edge = not (any (hit edgeProbe . tBB) sol)
-
-    vx'
-      | idle          = 0
-      | wallX || edge = -baseVX
-      | otherwise     = baseVX
-
-    ex'
-      | wallX     = eX e
-      | otherwise = ex0
-
-    -- Gravity / landing.
+    -- Gravity and landing
     vy0 = eVY e + grav * dt
     ey0 = eY e + vy0 * dt
 
@@ -234,25 +225,16 @@ stepBowser dt sol mario e =
         )
         sol
 
-    onG = not (null landTiles)
+    onG   = not (null landTiles)
+    snapY = maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles)
 
-    snapY =
-      if onG
-        then maximum (map (\t -> fromIntegral (tRow t) * ts + ts) landTiles)
-        else ey0
-
-    jumpNow = jt - dt <= 0 && onG && not idle
+    jumpNow = not idle && jt - dt <= 0 && onG
 
     (ey', vy')
       | onG && not jumpNow = (snapY, 0)
-      | jumpNow            = (eY e, 520)
+      | jumpNow            = (eY e, 500)
       | otherwise          = (ey0, vy0)
 
-    -- Keep Bowser visually facing Mario by using velocity direction.
-    -- If Mario is on the other side, Bowser will still face him when rendering
-    -- if your renderer uses eVX. This keeps movement simple and stable.
-
-stepShellStationary :: Float -> [Tile] -> Enemy -> Enemy
 stepShellStationary dt sol e = e { eY = ey', eVY = vy' }
   where
     vy0    = eVY e + grav * dt
