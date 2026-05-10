@@ -10,6 +10,7 @@ build-type:    Simple
 data-files:
     assets/*.png
   , assets/*.mp3
+  , assets/*.wav
 
 executable mario
   main-is:          Main.hs
@@ -25,6 +26,7 @@ executable mario
     , Physics
     , PowerUp
     , Rendering
+    , Sound
     , Types
   build-depends:
       base

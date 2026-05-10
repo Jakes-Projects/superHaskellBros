@@ -410,7 +410,7 @@ stepCastleComplete dt gs =
 --   Advances to the next level after 7 seconds total (enough for the end song).
 stepFlagAnim :: Float -> GS -> GS
 stepFlagAnim dt gs =
-  let totalTime  = 7.0          -- seconds for full end-of-level sequence
+  let totalTime  = 8.0          -- seconds for full end-of-level sequence
       -- flagStartY = 318 (flag centre at pole top, from Rendering).
       -- Flag bottom at ground surface (Y=32): flag centre = 32+18 = 50.
       -- Max travel = 318 - 50 = 268.
