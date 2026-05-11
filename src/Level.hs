@@ -265,7 +265,7 @@ level1_1 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (198*ts) 1 1
 --------------------------------------------------------------------------------
 
 level1_2 :: Level
-level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*8) (200*ts) 1 2
+level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*8) (207*ts) 1 2
   where
     -- ── Ground with pits ──────────────────────────────────────────────────
     -- Pits confirmed pixel-accurate: rows 0 and -1 both empty.
@@ -338,24 +338,28 @@ level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*8) (200*ts) 1 
       ++ [Tile 136 r Step | r <- [1..4]]
       ++ [Tile 137 r Step | r <- [1..4]]
 
-    -- ── Warp-zone room (cols 160–176) — Brick + tall pipe ────────────────
+    -- ── End pipe room ─────────────────────────────────────────────────────
+    -- The original tall pipe blocked Mario from reaching the exit pipes.
+    -- Keep the underground room feel, but make the path passable.
     warpRoom =
-         [Tile c r Brick | c <- [160..176], r <- [1..3]]
-      ++ mkPipe 168 10
-      ++ [Tile c r Brick | c <- [170..176], r <- [4..10]]
+        [Tile c r Brick | c <- [160..177], r <- [1..3]]
+      ++ mkPipe 168 3
 
-    -- ── Three underground exit pipes (h=3, all with Piranhas) ────────────
+    -- ── Underground exit pipes ────────────────────────────────────────────
+    -- Mario can stand on these and press Down/S to warp to the surface finish.
     exitPipeA = mkPipe 178 3
     exitPipeB = mkPipe 182 3
     exitPipeC = mkPipe 186 3
 
-    -- ── Right cave wall — Brick ───────────────────────────────────────────
-    rightWall = [Tile c r Brick | c <- [190,191], r <- [1..10]]
+    -- ── Right cave wall, with path left open to the surface section ───────
+    rightWall = [Tile c r Brick | c <- [190,191], r <- [4..10]]
 
     -- ── Surface finish ────────────────────────────────────────────────────
-    finish = mkStairsUp 192 8
-    flag   = mkFlag 200
-    castle = mkCastle 203
+    surfaceGround = mkGround 192 216
+    surfacePipe   = mkPipe 192 2
+    finish        = mkStairsUp 196 8 ++ [Tile 204 r Step | r <- [1..8]]
+    flag          = mkFlag 207
+    castle        = mkCastle 211
 
     tiles = ground
          ++ caveCeiling
@@ -368,7 +372,11 @@ level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*8) (200*ts) 1 
          ++ warpRoom
          ++ exitPipeA ++ exitPipeB ++ exitPipeC
          ++ rightWall
-         ++ finish ++ flag ++ castle
+         ++ surfaceGround
+         ++ surfacePipe
+         ++ finish
+         ++ flag
+         ++ castle
 
     -- ── Moving platforms (lifts over the pit section cols 138–159) ────────
     -- Sprite is 120×26 px. mpWidth=4 gives ~128px collision width ≈ sprite width.
@@ -717,10 +725,8 @@ level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
 
 --------------------------------------------------------------------------------
 -- World 2-2
--- Full underwater version.
--- No above-ground intro/exit for now.
+-- Underwater level with an exit pipe and above-ground finish section.
 -- Design goals:
---   • keep the whole level underwater
 --   • keep the main swim path open and accessible
 --   • remove Koopas from this level
 --   • use Cheep-cheeps and Bloopers for underwater enemies
@@ -729,57 +735,57 @@ level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
 --------------------------------------------------------------------------------
 
 level2_2 :: Level
-level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (183*ts) 2 2
+level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (207*ts) 2 2
   where
     -- ── Ocean floor ───────────────────────────────────────────────────────
     -- Solid ground. No solid ceiling — the wave strip is purely visual;
     -- physicsMarioWater enforces the ceiling boundary in code.
     floorTiles = mkGround 0 191
 
-    -- ── Floor-level raised platforms (pixel-verified mounds) ──────────────
+    -- ── Floor-level raised platforms ──────────────────────────────────────
     floorMound1 = [Tile c r Step | c <- [17..19], r <- [1..4]]
     floorMound2 = [Tile c r Step | c <- [41..42], r <- [1..4]]
     floorMound3 = [Tile c r Step | c <- [101..102], r <- [1..4]]
 
-    -- ── Tall mid-level pillars ─────────────────────────────────────────────
+    -- ── Tall mid-level pillars ────────────────────────────────────────────
     pillar1 = [Tile 155 r Step | r <- [1..7]]
     pillar2 = [Tile 163 r Step | r <- [1..7]]
 
-    -- ── Ceiling overhangs (stalactites) ───────────────────────────────────
+    -- ── Ceiling overhangs ─────────────────────────────────────────────────
     ceilHang1 = [Tile c r Step | c <- [77..78], r <- [9..11]]
     ceilHang2 =  [Tile c 9 Step | c <- [130..138]]
               ++ [Tile c 10 Step | c <- [130..131]]
               ++ [Tile 130 11 Step]
 
-    -- ── Right end wall (staircase + solid border) ─────────────────────────
+    -- ── Right end wall, kept open so Mario can reach the exit pipe ────────
     rightWall =
          [Tile c 1 Step | c <- [184..190]]
       ++ [Tile c 2 Step | c <- [185..190]]
       ++ [Tile c 3 Step | c <- [186..190]]
       ++ [Tile c r Step | c <- [187..190], r <- [4,8,9,10,11]]
       ++ [Tile c r Step | c <- [188..190], r <- [5,6,7]]
-      ++ [Tile c 4 Step | c <- [171..175]]
-      ++ [Tile c 4 Step | c <- [179..182]]
-      ++ [Tile c 8 Step | c <- [171..175]]
-      ++ [Tile c 8 Step | c <- [179..182]]
 
-    -- ── Coral decorations (Coral = solid, rendered with coral sprite) ──────
-    -- Columns chosen to be clear of all other solid geometry so coral can
-    -- block Mario without creating impassable walls.
-    -- Each entry: (col, height). Coral fills rows 1..height in that column.
+    -- ── Coral decorations ─────────────────────────────────────────────────
     coral =
       concat
         [ [Tile c r Coral | r <- [1..h]]
-        | (c, h) <- [ (10, 3), (11, 3)   -- short (1 sprite)
-                    , (32, 6), (33, 6)   -- tall  (2 sprites)
-                    , (88, 3), (89, 3)   -- short (1 sprite)
-                    , (119, 6), (120, 6) -- tall  (2 sprites)
-                    , (146, 3), (147, 3) -- short (1 sprite)
+        | (c, h) <- [ (10, 3), (11, 3)
+                    , (32, 6), (33, 6)
+                    , (88, 3), (89, 3)
+                    , (119, 6), (120, 6)
+                    , (146, 3), (147, 3)
                     ]
         ]
 
-    -- ── End marker ────────────────────────────────────────────────────────
-    endMarker = [Tile 183 r FlagPole | r <- [1..10]]
+    -- ── Underwater exit pipe + surface finish ─────────────────────────────
+    -- Press Down/S near the pipe at col 176 to warp to the surface section.
+    exitPipe = mkPipe 176 2
+
+    surfaceGround = mkGround 192 216
+    surfacePipe   = mkPipe 192 2
+    surfaceFinish = mkStairsUp 196 8 ++ [Tile 204 r Step | r <- [1..8]]
+    surfaceFlag   = mkFlag 207
+    surfaceCastle = mkCastle 211
 
     tiles =
          floorTiles
@@ -788,10 +794,14 @@ level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (183*ts) 2 2
       ++ ceilHang1 ++ ceilHang2
       ++ rightWall
       ++ coral
-      ++ endMarker
+      ++ exitPipe
+      ++ surfaceGround
+      ++ surfacePipe
+      ++ surfaceFinish
+      ++ surfaceFlag
+      ++ surfaceCastle
 
     -- ── Enemies ───────────────────────────────────────────────────────────
-    -- No pipes, no Piranhas. Mix of red and green Cheep-Cheeps + Bloopers.
     enemies =
          [ mkCheep     97  9 (-1)
          , mkCheep    127  2 (-1)
@@ -819,14 +829,6 @@ level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (183*ts) 2 2
          ]
 
     -- ── Coins ─────────────────────────────────────────────────────────────
-    -- Solid tile columns that coins must NOT appear in:
-    --   floorMounds: cols 17-19 rows 1-4, cols 41-42 rows 1-4, cols 101-102 rows 1-4
-    --   pillars:     col 155 rows 1-7, col 163 rows 1-7
-    --   ceilHang1:   cols 77-78 rows 9-11
-    --   ceilHang2:   cols 130-138 row 9, cols 130-131 row 10, col 130 row 11
-    --   rightWall:   cols 171-190 various
-    --   coral:       cols 10-11,32-33,88-89,119-120,146-147 rows 1..h
-    -- All coin positions below have been manually checked against these.
     coins = mkCoins $
          [(13,1),(14,1)]
       ++ [(26,7),(27,7),(28,7)]

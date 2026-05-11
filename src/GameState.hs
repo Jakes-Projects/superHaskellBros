@@ -109,10 +109,19 @@ resolvePlatforms plats m =
 isUnderwaterLevel :: Level -> Bool
 isUnderwaterLevel lvl = lWorld lvl == 2 && lNumber lvl == 2
 
+-- | World 2-2 uses underwater physics only before Mario exits the pipe.
 isUnderwaterGS :: GS -> Bool
 isUnderwaterGS gs =
   let lvl = gLevels gs !! gLevelIdx gs
-  in isUnderwaterLevel lvl
+  in isUnderwaterLevel lvl && not (isPipeExitSurface gs)
+
+-- | After the end pipe traversal, 1-2 and 2-2 should render/play like surface endings.
+isPipeExitSurface :: GS -> Bool
+isPipeExitSurface gs =
+  let lvl = gLevels gs !! gLevelIdx gs
+      x   = mX (gMario gs)
+  in  (lWorld lvl == 1 && lNumber lvl == 2 && x >= 192 * ts)
+   || (lWorld lvl == 2 && lNumber lvl == 2 && x >= 192 * ts)
 
 -- | Brief world screen before every level and respawn.
 --   For the 1-2 intro level (lNumber == 0) the black screen shows "WORLD 1-2"
@@ -183,6 +192,48 @@ stepPipeEntry dt gs =
                , gPipeTimer = t
                }
 
+standYOnTop :: Float -> Mario -> Float
+standYOnTop topY m =
+  topY + case mState m of
+           Small -> ts / 2
+           _     -> ts
+
+nearPipeCenter :: Mario -> Int -> Bool
+nearPipeCenter m c =
+  abs (mX m - (fromIntegral c * ts + ts)) < ts * 0.85
+
+wantsExitPipe :: Level -> KS -> Mario -> Bool
+wantsExitPipe lvl ks m
+  | not (kD ks) = False
+  | lWorld lvl == 1 && lNumber lvl == 2 =
+      mGround m && any (nearPipeCenter m) [178, 182, 186]
+  | lWorld lvl == 2 && lNumber lvl == 2 =
+      mX m < 190 * ts && any (nearPipeCenter m) [176]
+  | otherwise = False
+
+applyExitPipeTraversal :: Level -> KS -> Mario -> Mario
+applyExitPipeTraversal lvl ks m
+  | not (wantsExitPipe lvl ks m) = m
+  | lWorld lvl == 1 && lNumber lvl == 2 =
+      m { mX = 193 * ts
+        , mY = standYOnTop (3 * ts) m
+        , mVX = 0
+        , mVY = 0
+        , mGround = True
+        , mSwimming = False
+        , mSliding = False
+        }
+  | lWorld lvl == 2 && lNumber lvl == 2 =
+      m { mX = 193 * ts
+        , mY = standYOnTop (3 * ts) m
+        , mVX = 0
+        , mVY = 0
+        , mGround = True
+        , mSwimming = False
+        , mSliding = False
+        }
+  | otherwise = m
+
 step :: Float -> GS -> GS
 step dt gs
   | gPhase gs == LevelIntro           = stepLevelIntro dt gs
@@ -198,7 +249,7 @@ step dt gs
     sol = filter (\t -> solid (tType t) && tRow t /= (-2)) (gTiles gs)
 
     currentLevel = gLevels gs !! gLevelIdx gs
-    underwater = isUnderwaterLevel currentLevel
+    underwater = isUnderwaterGS gs
 
     -- ── Moving platforms ──────────────────────────────────────────────────
     oldPlats = gPlatforms gs
@@ -233,27 +284,29 @@ step dt gs
       if underwater
         then m1
         else resolvePlatforms newPlats m1
+    m1pipe = applyExitPipeTraversal currentLevel ks m1p
+
 
     -- Decrement timers; commit power-up transformation when flash timer expires
     swimStroke  = underwater && kJ ks
-    newSwimAnim = if swimStroke then (mSwimAnim m1p + 1) `mod` 5 else mSwimAnim m1p
+    newSwimAnim = if swimStroke then (mSwimAnim m1pipe + 1) `mod` 5 else mSwimAnim m1pipe
 
     transformTick =
-      let t = mTransformTimer m1p - dt
-      in if mTransformTimer m1p > 0
-           then if t <= 0
-                  then m1p { mTransformTimer = 0
-                           , mState          = mTransformTarget m1p }
-                  else m1p { mTransformTimer = t }
-           else m1p
+      let t = mTransformTimer m1pipe - dt
+      in if mTransformTimer m1pipe > 0
+          then if t <= 0
+                  then m1pipe { mTransformTimer = 0
+                              , mState          = mTransformTarget m1pipe }
+                  else m1pipe { mTransformTimer = t }
+          else m1pipe
 
-    m2 = transformTick { mAnim     = mAnim m1p + dt
-                       , mInv      = max 0 (mInv m1p - dt)
-                       , mFireCool = max 0 (mFireCool m1p - dt)
-                       , mJoeMode  = mJoeMode m1p && mState m1p == Fire
-                       , mSwimAnim = newSwimAnim
-                       , mSwimming = swimStroke
-                       }
+    m2 = transformTick { mAnim     = mAnim m1pipe + dt
+                      , mInv      = max 0 (mInv m1pipe - dt)
+                      , mFireCool = max 0 (mFireCool m1pipe - dt)
+                      , mJoeMode  = mJoeMode m1pipe && mState transformTick == Fire
+                      , mSwimAnim = newSwimAnim
+                      , mSwimming = swimStroke
+                      }
 
     cam = max (gCam gs) (max (fromIntegral sW / 2) (mX m2))
 

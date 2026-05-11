@@ -344,15 +344,34 @@ worldYOffset = -(fromIntegral sH / 2) + 3.0 * ts - ts   -- = -236
 
 -- ─── Top-level draw ───────────────────────────────────────────────────────────
 
+isPipeExitSurfaceRender :: GS -> Bool
+isPipeExitSurfaceRender gs =
+  let lvl = gLevels gs !! gLevelIdx gs
+      x   = mX (gMario gs)
+  in  (lWorld lvl == 1 && lNumber lvl == 2 && x >= 192 * ts)
+   || (lWorld lvl == 2 && lNumber lvl == 2 && x >= 192 * ts)
+
 isUnderwater :: GS -> Bool
 isUnderwater gs =
   let lvl = gLevels gs !! gLevelIdx gs
-  in lWorld lvl == 2 && lNumber lvl == 2
+  in lWorld lvl == 2 && lNumber lvl == 2 && not (isPipeExitSurfaceRender gs)
 
 isUnderground :: GS -> Bool
 isUnderground gs =
   let lvl = gLevels gs !! gLevelIdx gs
-  in not (isUnderwater gs) && lNumber lvl == 2
+  in not (isUnderwater gs)
+     && lNumber lvl == 2
+     && not (isPipeExitSurfaceRender gs)
+
+visibleExitTiles :: GS -> [Tile] -> [Tile]
+visibleExitTiles gs tiles
+  | isPipeExitSurfaceRender gs =
+      let lvl = gLevels gs !! gLevelIdx gs
+      in if (lWorld lvl == 1 && lNumber lvl == 2)
+         || (lWorld lvl == 2 && lNumber lvl == 2)
+           then filter (\t -> tCol t >= 192) tiles
+           else tiles
+  | otherwise = tiles
 
 isCastle :: GS -> Bool
 isCastle gs =
@@ -379,6 +398,8 @@ draw spr gs
     underwater  = isUnderwater gs
     underground = isUnderground gs || underwater
     castle      = isCastle gs
+    athletic    = isWorld2_3 gs
+    tilesForDraw = visibleExitTiles gs (gTiles gs)
     clock       = mAnim (gMario gs)
     world = pictures
       [ if underground || castle then blank else drawDecorations spr
@@ -387,20 +408,21 @@ draw spr gs
                  (rectangleSolid (fromIntegral (220 * (32 :: Int))) (fromIntegral sH)))
           else blank
       -- Lava drawn first so floor tiles render on top (prevents clipping)
-      , if castle then drawLava spr (gTiles gs) else blank
+      , if castle then drawLava spr tilesForDraw else blank
       -- Piranhas behind all tiles
       , drawEnem    spr underground clock (filter isPiranha (gEnem gs))
       , if isPipeEntry then drawMarioPipeClipped spr gs else blank
-      , drawTilesOfType spr underground underwater castle clock flagOff isPipeEntry isGround      anims (gTiles gs)
-      , drawTilesOfType spr underground underwater castle clock flagOff isPipeEntry (\t -> not (isGround t) && not (isPipeEntry && tType t == Step)) anims (gTiles gs)
+      , drawTilesOfType spr underground underwater castle clock flagOff isPipeEntry isGround anims tilesForDraw
+      , drawTilesOfType spr underground underwater castle clock flagOff isPipeEntry shouldDrawNonGround anims tilesForDraw
+      , if athletic then drawAthleticBridges spr tilesForDraw else blank
       , drawBrickAnims  spr underground clock anims
-      , if underwater then drawCoralTiles spr (gTiles gs) else blank
+      , if underwater then drawCoralTiles spr tilesForDraw else blank
       -- Bridge rendered over floor tiles at Bowser's pit
-      , if castle then drawCastleBridge spr (gTiles gs) else blank
+      , if castle then drawCastleBridge spr tilesForDraw else blank
       -- Overworld end-of-level castles drawn as single sprites (non-castle levels)
-      , if not castle then drawOverworldCastles spr (gTiles gs) else blank
+      , if not castle then drawOverworldCastles spr tilesForDraw else blank
       -- Flagpole drawn as a sprite pass (non-castle levels)
-      , if not castle then drawFlagpoles spr flagOff (gTiles gs) else blank
+      , if not castle then drawFlagpoles spr flagOff tilesForDraw else blank
       , drawPlatforms spr (gPlatforms gs)
       , drawCoins   spr underwater clock (gCoins gs)
       , drawPups    spr clock (gPups  gs)
@@ -412,6 +434,10 @@ draw spr gs
     anims   = gBrickAnims gs
     flagOff = gFlagOffset gs
     isPipeEntry = gPhase gs == PipeEntry
+    shouldDrawNonGround t =
+      not (isGround t)
+        && not (isPipeEntry && tType t == Step)
+        && not (athletic && isAthleticDeckTile (gTiles gs) t)
 
 -- | Tile water.png across the top of the screen in screen space.
 -- The real NES game has a ~2-tile (64px) blue sky strip above the wave.
@@ -432,6 +458,67 @@ drawWaveStrip spr gs =
 
 isGround :: Tile -> Bool
 isGround t = tType t == Ground
+
+isWorld2_3 :: GS -> Bool
+isWorld2_3 gs =
+  let lvl = gLevels gs !! gLevelIdx gs
+  in lWorld lvl == 2 && lNumber lvl == 3
+
+isAthleticDeckTile :: [Tile] -> Tile -> Bool
+isAthleticDeckTile tiles t =
+  tType t == Step
+    && tRow t `elem` [2, 4]
+    && hasStep (tCol t - 1) (tRow t)
+    && hasStep (tCol t + 1) (tRow t)
+  where
+    hasStep c r = any (\x -> tType x == Step && tCol x == c && tRow x == r) tiles
+
+drawAthleticBridges :: Sprites -> [Tile] -> Picture
+drawAthleticBridges spr tiles =
+  pictures [ drawRun row run | row <- [4, 2], run <- bridgeRuns row ]
+  where
+    stepCols row =
+      sortUnique
+        [ tCol t
+        | t <- tiles
+        , tType t == Step
+        , tRow t == row
+        , hasStep (tCol t - 1) row || hasStep (tCol t + 1) row
+        ]
+
+    hasStep c r =
+      any (\t -> tType t == Step && tCol t == c && tRow t == r) tiles
+
+    bridgeRuns row =
+      filter (\xs -> length xs >= 3) (groupConsecutive (stepCols row))
+
+    drawRun row run =
+      let c1    = minimum run
+          c2    = maximum run
+          x1    = fromIntegral c1 * ts
+          x2    = fromIntegral (c2 + 1) * ts
+          midX  = (x1 + x2) / 2
+          y     = fromIntegral row * ts + ts / 2
+          scX   = (x2 - x1) / 624
+          scY   = ts / 64
+      in translate midX y (scale scX scY (spCastleBridge spr))
+
+    sortUnique [] = []
+    sortUnique xs = foldr insertSorted [] xs
+
+    insertSorted x [] = [x]
+    insertSorted x ys@(y:rest)
+      | x == y    = ys
+      | x < y     = x : ys
+      | otherwise = y : insertSorted x rest
+
+    groupConsecutive [] = []
+    groupConsecutive (x:xs) = go [x] xs
+      where
+        go acc [] = [acc]
+        go acc (y:ys)
+          | y == last acc + 1 = go (acc ++ [y]) ys
+          | otherwise         = acc : go [y] ys
 
 -- ─── Mario ────────────────────────────────────────────────────────────────────
 
