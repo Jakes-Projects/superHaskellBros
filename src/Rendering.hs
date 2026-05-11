@@ -110,6 +110,7 @@ data Sprites = Sprites
   , spCastleBrick  :: Picture   -- castle_bricks.png  48x48
   , spCastleAxe    :: Picture   -- castle_axe.png     36x40
   , spCastleBridge :: Picture   -- castle_bridge.png  624x64
+  , spBridge       :: Picture   -- bridge.png          144x48
   , spLava         :: Picture   -- lava.png           144x72
     -- Piranha Plant (overworld + underground)
   , spPiranha1     :: Picture
@@ -281,6 +282,7 @@ loadSprites = Sprites
   <*> loadPNG "assets/castle_bricks.png"
   <*> loadPNG "assets/castle_axe.png"
   <*> loadPNG "assets/castle_bridge.png"
+  <*> loadPNG "assets/bridge.png"
   <*> loadPNG "assets/lava.png"
   -- Piranha Plant
   <*> loadPNG "assets/piranha_plant_1.png"
@@ -464,12 +466,32 @@ isWorld2_3 gs =
   let lvl = gLevels gs !! gLevelIdx gs
   in lWorld lvl == 2 && lNumber lvl == 3
 
+-- | A Step tile at (col, row) is part of a staircase (rather than a flat
+--   bridge deck) when itself or one of its horizontal neighbours has another
+--   Step tile sitting on top of it. Bridge decks are flat by construction —
+--   nothing sits one row above the deck along the same run — whereas every
+--   step of the end-of-level staircase has a taller neighbour climbing past
+--   it. This lets us exclude the staircase from the athletic bridge pass so
+--   the bridge sprite is not painted across the level-end stairs (which used
+--   to obscure both the staircase and the flag/castle finish on World 2-3).
+isStaircaseStepTile :: [Tile] -> Tile -> Bool
+isStaircaseStepTile tiles t =
+  tType t == Step
+    && (hasStep c     (r + 1)
+        || hasStep (c - 1) (r + 1)
+        || hasStep (c + 1) (r + 1))
+  where
+    c = tCol t
+    r = tRow t
+    hasStep x y = any (\x' -> tType x' == Step && tCol x' == x && tRow x' == y) tiles
+
 isAthleticDeckTile :: [Tile] -> Tile -> Bool
 isAthleticDeckTile tiles t =
   tType t == Step
     && tRow t `elem` [2, 4]
     && hasStep (tCol t - 1) (tRow t)
     && hasStep (tCol t + 1) (tRow t)
+    && not (isStaircaseStepTile tiles t)
   where
     hasStep c r = any (\x -> tType x == Step && tCol x == c && tRow x == r) tiles
 
@@ -484,6 +506,7 @@ drawAthleticBridges spr tiles =
         , tType t == Step
         , tRow t == row
         , hasStep (tCol t - 1) row || hasStep (tCol t + 1) row
+        , not (isStaircaseStepTile tiles t)
         ]
 
     hasStep c r =
@@ -497,11 +520,11 @@ drawAthleticBridges spr tiles =
           c2    = maximum run
           x1    = fromIntegral c1 * ts
           x2    = fromIntegral (c2 + 1) * ts
-          midX  = (x1 + x2) / 2
           y     = fromIntegral row * ts + ts / 2
-          scX   = (x2 - x1) / 624
-          scY   = ts / 64
-      in translate midX y (scale scX scY (spCastleBridge spr))
+          sprW  = 144  -- bridge.png native width
+          -- Left edges of each copy; stop once we've passed the run's right edge
+          lefts = takeWhile (< x2) [x1, x1 + sprW ..]
+      in pictures [ translate (lx + sprW / 2) y (spBridge spr) | lx <- lefts ]
 
     sortUnique [] = []
     sortUnique xs = foldr insertSorted [] xs

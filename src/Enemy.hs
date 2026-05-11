@@ -140,28 +140,54 @@ stepCheepCheep dt sol _ e = e { eX = x', eY = y', eVX = vx', eVY = vy' }
 
 
 -- | World 2-3 jumping fish.
---   These jump from below the screen in an arc instead of swimming/flying around.
+--   These arc up from below the screen, fly across the visible area, then
+--   fall back below and disappear. Once they have fallen far enough below
+--   the bottom of the screen they are relaunched for the next pass — so the
+--   player sees them rise, peak, and drop out of view, rather than bouncing
+--   off an invisible floor at the bottom of the screen.
+--
+--   Each fish picks one of three jump strengths based on its spawn column,
+--   so the wave reads as a mix of low / medium / high threats.
 stepJumpingCheep :: Float -> Enemy -> Enemy
-stepJumpingCheep dt e =
-  if y0 < (-ts * 2.5)
-     then e { eX = x0
-            , eY = -ts * 2
-            , eVX = vx0
-            , eVY = jumpV
-            }
-     else e { eX = x0
-            , eY = y0
-            , eVX = vx0
-            , eVY = vy0
-            }
+stepJumpingCheep dt e
+  -- Far below the screen: time to start a new jump.
+  -- We keep the same eX (no teleport sideways), and the time spent falling
+  -- from peak down to this deep relaunch line gives a natural gap between
+  -- jumps, so the fish actually disappears before reappearing.
+  | eY e < (-ts * 8) =
+      e { eX  = x0
+        , eY  = -ts * 8        -- park just below the relaunch line
+        , eVX = vx0
+        , eVY = launchV
+        }
+  | otherwise =
+      e { eX  = x0
+        , eY  = y0
+        , eVX = vx0
+        , eVY = vy0
+        }
   where
+    -- Horizontal: keep whatever direction the spawn assigned.
     vx0 = if abs (eVX e) < 1 then -85 else eVX e
+
+    -- Lighter-than-normal gravity so the arc feels floaty, like the NES fish.
     vy0 = eVY e + grav * 0.85 * dt
     x0  = eX e + vx0 * dt
     y0  = eY e + vy0 * dt
 
-    -- Vary the height a little so every fish does not jump exactly the same.
-    jumpV = 560 + fromIntegral ((floor (eX e / ts) :: Int) `mod` 5) * 28
+    -- Three height tiers keyed off the spawn column, so the pattern is
+    -- deterministic but visually varied. Approximate peak heights above
+    -- y = 0 (top of the floor row), with gravity = 0.85 * grav = 1190:
+    --   low    v=620  → peak ~ 5 tiles
+    --   medium v=800  → peak ~ 8.4 tiles
+    --   high   v=960  → peak ~ 12 tiles  (well over Mario's jump apex)
+    tier :: Int
+    tier = (floor (eX e / ts) :: Int) `mod` 3
+
+    launchV = case tier of
+      0 -> 900       -- low
+      1 -> 1100      -- medium
+      _ -> 1300      -- high
 
 
 -- | Blooper: slow underwater enemy that drifts toward Mario.

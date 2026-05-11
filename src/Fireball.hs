@@ -149,7 +149,10 @@ checkVsEnemies fb = foldr go (False, [], 0)
     isImmune e = case (eType e, eState e) of
       (_, EDead _)                -> True
       (_, EFallDead _)            -> True
-      (Piranha, EPiranha _ False) -> True
+      -- Match Enemy.hs's `isDangerous` rule: a piranha is only "safe"
+      -- when it's actually below the pipe rim. Otherwise (still rising,
+      -- fully up, OR partway through retracting) it should be hittable.
+      (Piranha, EPiranha _ _)     -> eY e <= eVY e + 2
       _                           -> False
 
     killEnemy e =

@@ -22,6 +22,13 @@ eBB e
       -- eX/eY is his lower-left-ish position, so center the hitbox around his body.
       (eX e + ts, eY e + ts, ts * 1.55, ts * 1.65)
 
+  | eType e == Piranha =
+      -- Piranha sprite is 48 wide × 72 tall, rendered centered at
+      -- (eX + ts/2, eY + 36). The default ts*0.78 box only covers the
+      -- bottom ~1/3 of the plant, so fireballs (and stomps) routinely
+      -- pass through the head without registering. Match the sprite.
+      (eX e + ts / 2, eY e + 36, ts * 1.25, ts * 2)
+
   | otherwise =
       (eX e + ts / 2, eY e + ts / 2, ts * 0.78, ts * 0.78)
 

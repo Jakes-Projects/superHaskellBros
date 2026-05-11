@@ -910,8 +910,11 @@ level2_3 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (fromIntegral en
     startGround = mkGround 0 17
 
     -- Recovery ground before the final staircase.
-    -- This gives Mario a safe stretch after the bridge section.
-    endGround = mkGround 166 216
+    -- Starts at col 157 — immediately after bridge6 ends (cols 133-156) — so
+    -- Mario lands on solid ground when he runs off the last bridge instead of
+    -- falling into a 9-tile pit. Without this, he never reaches the flagpole
+    -- at col 202 and the end-of-level cutscene (and castle) never trigger.
+    endGround = mkGround 157 216
 
     startCastle = castleOnGround 0
 
@@ -933,9 +936,12 @@ level2_3 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (fromIntegral en
 
     -- Intentional middle platform:
     -- placed under the middle bridge gap as a visual feature and safety route.
+    -- (The second platform at cols 158-164 was removed when endGround was
+    -- extended back to col 157; its posts would have collided with the new
+    -- ground tiles, and the platform itself is redundant now that there is
+    -- solid ground directly below it.)
     middlePlatforms =
          bridge 2 80 91
-      ++ bridge 2 158 164
 
     bridgeSupports =
          posts 4 [14, 22, 30]
@@ -944,7 +950,7 @@ level2_3 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (fromIntegral en
       ++ posts 4 [84, 94, 103]
       ++ posts 4 [109, 119, 128]
       ++ posts 4 [134, 146, 156]
-      ++ posts 2 [80, 91, 160, 164]
+      ++ posts 2 [80, 91]
 
     -- Minimal ? blocks.
     -- Coin list below avoids these exact coordinates.
