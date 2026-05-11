@@ -67,6 +67,19 @@ mkStairsDown c h =
          | i <- [0..h-1]
          ]
 
+-- | Standard end-of-level staircase used by all flagpole levels.
+--   Layout: 8-step staircase, one full-height cap column, then 6 open
+--   ground tiles before the flagpole. This keeps the pole from feeling
+--   crowded while preserving the original-style ending.
+mkEndStairs :: Int -> [Tile]
+mkEndStairs c = mkStairsUp c 8 ++ [Tile (c + 8) r Step | r <- [1..8]]
+
+endFlagCol :: Int -> Int
+endFlagCol stairC = stairC + 15
+
+endCastleCol :: Int -> Int
+endCastleCol stairC = endFlagCol stairC + 4
+
 mkBridge :: Int -> Int -> [Tile]
 mkBridge c1 c2 = mkRow Step 1 c1 c2
 
@@ -170,7 +183,7 @@ mkBowser c =
 --------------------------------------------------------------------------------
 
 level1_1 :: Level
-level1_1 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (198*ts) 1 1
+level1_1 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (fromIntegral endCol * ts) 1 1
   where
     blocks =
       -- Lone Q-block at col 16, row 4: power-up (Mushroom/Flower)
@@ -236,10 +249,12 @@ level1_1 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (198*ts) 1 1
           ++ mkStairsUp 148 4 ++ [Tile 152 r Step | r <- [1..4]]
           ++ mkStairsDown 155 4
 
-    -- Final staircase: 8 steps up (cols 181–188) + cap column (189, h=8)
-    finish = mkStairsUp 181 8 ++ [Tile 189 r Step | r <- [1..8]]
-    flag   = mkFlag 198
-    castle = mkCastle 202
+    -- Standardized ending: 8-step stairs + 6-tile run-up before the flag.
+    endStair = 181
+    endCol   = endFlagCol endStair
+    finish   = mkEndStairs endStair
+    flag     = mkFlag endCol
+    castle   = mkCastle (endCastleCol endStair)
 
     tiles = ground ++ blocks ++ pipes ++ stairs ++ finish ++ flag ++ castle
 
@@ -265,7 +280,7 @@ level1_1 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*1.5) (198*ts) 1 1
 --------------------------------------------------------------------------------
 
 level1_2 :: Level
-level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*8) (207*ts) 1 2
+level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*8) (fromIntegral endCol * ts) 1 2
   where
     -- ── Ground with pits ──────────────────────────────────────────────────
     -- Pits confirmed pixel-accurate: rows 0 and -1 both empty.
@@ -355,11 +370,13 @@ level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*8) (207*ts) 1 
     rightWall = [Tile c r Brick | c <- [190,191], r <- [4..10]]
 
     -- ── Surface finish ────────────────────────────────────────────────────
-    surfaceGround = mkGround 192 216
+    surfaceGround = mkGround 192 224
     surfacePipe   = mkPipe 192 2
-    finish        = mkStairsUp 196 8 ++ [Tile 204 r Step | r <- [1..8]]
-    flag          = mkFlag 207
-    castle        = mkCastle 211
+    endStair      = 196
+    endCol        = endFlagCol endStair
+    finish        = mkEndStairs endStair
+    flag          = mkFlag endCol
+    castle        = mkCastle (endCastleCol endStair)
 
     tiles = ground
          ++ caveCeiling
@@ -411,9 +428,9 @@ level1_2 = mkLevel tiles enemies coins [] [] platforms (ts*3) (ts*8) (207*ts) 1 
 --------------------------------------------------------------------------------
 
 level1_3 :: Level
-level1_3 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*5) (244*ts) 1 3
+level1_3 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*5) (fromIntegral endCol * ts) 1 3
   where
-    ground = mkGround 0 244
+    ground = mkGround 0 270
 
     islands =
          mkPlatform 3 10 12 ++ mkPlatform 4 10 12
@@ -443,7 +460,14 @@ level1_3 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*5) (244*ts) 1 3
       ++ mkQPower 6 176 176
       ++ mkQPower 4 208 208 ++ mkQCoin 4 209 209
 
-    tiles = ground ++ islands ++ jumps
+    -- Standardized ending added so the flagpole cutscene has a real pole/castle.
+    endStair = 244
+    endCol   = endFlagCol endStair
+    finish   = mkEndStairs endStair
+    flag     = mkFlag endCol
+    castle   = mkCastle (endCastleCol endStair)
+
+    tiles = ground ++ islands ++ jumps ++ finish ++ flag ++ castle
 
     enemies = map mkG [14,20,50,82,114,146,178,210] ++ map mkK [64,128,192]
     coins = mkCoins
@@ -594,7 +618,7 @@ level1_4 = mkLevel tiles enemies coins [] firebars [] (ts*3) (ts*6) (159*ts) 1 4
 --------------------------------------------------------------------------------
 
 level2_1 :: Level
-level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
+level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (fromIntegral endCol * ts) 2 1
   where
     -- Custom castle helper so the castle sits ON TOP of ground row 0,
     -- instead of overlapping/embedding into it like mkCastle does.
@@ -677,10 +701,12 @@ level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
       , (169,3)
       ]
 
-    -- Tall final staircase, flag, and ending castle.
-    finish = mkStairsUp 190 8 ++ [Tile 198 r Step | r <- [1..8]]
-    flag   = mkFlag 205
-    castle = castleOnGround 209
+    -- Standardized ending: 8-step stairs + 6-tile run-up before the flag.
+    endStair = 190
+    endCol   = endFlagCol endStair
+    finish   = mkEndStairs endStair
+    flag     = mkFlag endCol
+    castle   = castleOnGround (endCastleCol endStair)
 
     tiles =
          ground
@@ -735,7 +761,7 @@ level2_1 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (205*ts) 2 1
 --------------------------------------------------------------------------------
 
 level2_2 :: Level
-level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (207*ts) 2 2
+level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (fromIntegral endCol * ts) 2 2
   where
     -- ── Ocean floor ───────────────────────────────────────────────────────
     -- Solid ground. No solid ceiling — the wave strip is purely visual;
@@ -781,11 +807,13 @@ level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (207*ts) 2 2
     -- Press Down/S near the pipe at col 176 to warp to the surface section.
     exitPipe = mkPipe 176 2
 
-    surfaceGround = mkGround 192 216
+    surfaceGround = mkGround 192 224
     surfacePipe   = mkPipe 192 2
-    surfaceFinish = mkStairsUp 196 8 ++ [Tile 204 r Step | r <- [1..8]]
-    surfaceFlag   = mkFlag 207
-    surfaceCastle = mkCastle 211
+    endStair      = 196
+    endCol        = endFlagCol endStair
+    surfaceFinish = mkEndStairs endStair
+    surfaceFlag   = mkFlag endCol
+    surfaceCastle = mkCastle (endCastleCol endStair)
 
     tiles =
          floorTiles
@@ -866,7 +894,7 @@ level2_2 = mkLevel tiles enemies coins [] [] [] (ts*3) (ts*4) (207*ts) 2 2
 --------------------------------------------------------------------------------
 
 level2_3 :: Level
-level2_3 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (198*ts) 2 3
+level2_3 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (fromIntegral endCol * ts) 2 3
   where
     castleOnGround c =
       mkRect Castle c (c+4) 1 5 ++
@@ -927,10 +955,12 @@ level2_3 = mkLevel tiles enemies coins [] [] [] (ts*7) (ts*1.5) (198*ts) 2 3
       ++ mkQPower 7 112 112
       ++ mkQCoin  7 113 114
 
-    -- Final staircase is close to the flag, but the whole level stays long.
-    finish = mkStairsUp 187 8 ++ [Tile 195 r Step | r <- [1..8]]
-    flag   = mkFlag 198
-    castle = castleOnGround 203
+    -- Standardized ending: 8-step stairs + 6-tile run-up before the flag.
+    endStair = 187
+    endCol   = endFlagCol endStair
+    finish   = mkEndStairs endStair
+    flag     = mkFlag endCol
+    castle   = castleOnGround (endCastleCol endStair)
 
     tiles =
          startGround
